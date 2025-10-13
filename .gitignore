@@ -1,0 +1,57 @@
+# ignore everything in the root except the "wp-content" directory.
+!wp-content/
+!api/
+
+# ignore everything in the "wp-content" directory, except:
+# "mu-plugins", "plugins", "themes" directory
+wp-content/*
+!wp-content/mu-plugins/
+!wp-content/plugins/
+!wp-content/themes/
+
+# ignore all plugins except hs-auto-alt-tagger plugin
+wp-content/plugins/*
+!wp-content/plugins/hd-auto-alt-tagger/ 
+
+# ignore all themmes
+wp-content/themes/*
+
+# ignore folders
+raw/
+bkup/
+
+# ignore files 
+316324A3163E669B63C2FD8846935C6E.txt
+
+
+# ignore node dependency directories
+node_modules/
+
+# ignore log files and databases
+*.log
+*.sql
+*.sqlite
+*.zip
+hatrixsolutions_com_key.txt
+
+sftp-config.json
+
+wp-config.php
+
+.vscode/sftp.json
+
+20230731_hatrixsolutions_8da50a018fc7d3108049_20230731211441_archive.daf
+
+# Security - Don't track secrets and sensitive files
+api/hs-auto-alt-tagger/secrets.php
+*secrets.php
+secrets.*.php
+config.php
+.env
+.env.*
+*.key
+*.pem
+
+# probably shound't track stripe or stripe6431
+api/stripe6431/*
+api/stripe/*
