@@ -1,50 +1,32 @@
-# ignore everything in the root except the "wp-content" directory.
-!wp-content/
-!api/
+# WordPress Plugin - Auto Alt Text Generator For SEO
 
-# ignore everything in the "wp-content" directory, except:
-# "mu-plugins", "plugins", "themes" directory
-wp-content/*
-!wp-content/mu-plugins/
-!wp-content/plugins/
-!wp-content/themes/
-
-# ignore all plugins except hs-auto-alt-tagger plugin
-wp-content/plugins/*
-!wp-content/plugins/hd-auto-alt-tagger/ 
-
-# ignore all themmes
-wp-content/themes/*
-
-# ignore folders
-raw/
-bkup/
-
-# ignore files 
-316324A3163E669B63C2FD8846935C6E.txt
-
-
-# ignore node dependency directories
+# Development files
 node_modules/
+.vscode/
+.idea/
+*.code-workspace
 
-# ignore log files and databases
+# Log files
 *.log
 *.sql
 *.sqlite
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Build/distribution files
 *.zip
-hatrixsolutions_com_key.txt
+build/
+dist/
 
-sftp-config.json
-
-wp-config.php
-
-.vscode/sftp.json
-
-20230731_hatrixsolutions_8da50a018fc7d3108049_20230731211441_archive.daf
-
-# Security - Don't track secrets and sensitive files
-api/hs-auto-alt-tagger/secrets.php
-*secrets.php
+# Security - Sensitive configuration files
+secrets.php
 secrets.*.php
 config.php
 .env
@@ -52,6 +34,27 @@ config.php
 *.key
 *.pem
 
-# probably shound't track stripe or stripe6431
-api/stripe6431/*
-api/stripe/*
+# IDE and editor files
+sftp-config.json
+.vscode/sftp.json
+
+# Backup files
+*.bak
+*.backup
+bkup/
+raw/
+
+# Test files (if you add testing later)
+/vendor/
+composer.lock
+phpunit.xml
+.phpunit.result.cache
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini

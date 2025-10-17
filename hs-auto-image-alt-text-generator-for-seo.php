@@ -8,7 +8,7 @@
  * @license     GPL-2.0-or-later
  *
  * @wordpress-plugin
- * Plugin Name: Auto Alt Text Generator For SEO
+ * Plugin Name: Auto Image Alt Text Generator For SEO
  * Plugin URI:  https://hatrixsolutions.com/auto-alt-text-generator-for-seo
  * Description: Automatically generate and apply alt tags to images using AI.
  * Version:     0.1.0
