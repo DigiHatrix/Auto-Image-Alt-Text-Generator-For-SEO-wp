@@ -1,170 +1,175 @@
-=== Auto Image Alt Text Generator for SEO ===
-Contributors: hatrixsolutions
-Tags: alt text, image seo, accessibility, ai, wcag
-Requires at least: 5.0
-Tested up to: 6.8
-Requires PHP: 7.4
-Stable tag: 0.1.0
-License: GPLv2 or later
-License URI: https://www.gnu.org/licenses/gpl-2.0.html
+# Auto Image Alt Text Generator For SEO
 
-Automatically generate accurate, descriptive alt text for your WordPress images using AI — in bulk or on demand. Improve your SEO, boost accessibility, and save hours.
+![WordPress Plugin Version](https://img.shields.io/badge/version-0.1.0-blue)
+![WordPress Compatibility](https://img.shields.io/badge/wordpress-5.0%2B-brightgreen)
+![PHP Compatibility](https://img.shields.io/badge/php-7.4%2B-purple)
+![License](https://img.shields.io/badge/license-GPLv2%2B-orange)
 
-== Description ==
+> Automatically generate AI-powered alt text for WordPress images. Improve SEO, boost accessibility, and save hours with bulk or on-demand generation.
 
-Stop wasting time writing image descriptions one by one.
-**Auto Image Alt Text Generator for SEO** uses advanced AI to automatically create alt text for your images — instantly and intelligently.
+---
 
-= 🪄 Key Features =
+## 🚀 Features
 
-* **Bulk Scan & Tag** - Automatically generate alt text for all existing images in your Media Library
-* **On-Demand Generation** - Generate alt text for individual images with a single click
-* **AI-Powered Descriptions** - Creates short, human-like alt text optimized for SEO and accessibility
-* **Alt Text Viewer** - View, filter, and edit all your image alt text in one convenient dashboard
-* **Manual Control** - Regenerate or clear alt text for any individual image
-* **SEO-Friendly Results** - Improve search visibility and meet WCAG accessibility standards
-* **Grid & Table Views** - Choose your preferred way to manage your images
-* **Smart Search & Filters** - Quickly find images with or without alt text
+- **🪄 Bulk Generation** - Process multiple images at once with AI-powered alt text generation
+- **⚡ On-Demand Generation** - Generate alt text for individual images with a single click
+- **🧠 AI-Powered** - Uses advanced AI to understand image content and generate accurate descriptions
+- **📊 Alt Text Viewer** - Comprehensive dashboard to view and manage all your image alt text
+- **🔍 Smart Search & Filters** - Quickly find images missing alt text
+- **📱 Grid & Table Views** - Choose your preferred visualization
+- **♿ WCAG Compliant** - Meet accessibility standards automatically
+- **🎯 SEO Optimized** - Improve search engine rankings with descriptive alt text
 
-= 🚀 Perfect For =
+## 📦 Installation
 
-* Bloggers, marketers, and agencies improving image SEO
-* Web designers enhancing accessibility compliance
-* Site owners managing large media libraries
-* Anyone tired of manually writing image alt text
+### From WordPress.org (Recommended)
 
-= 🔒 Why It's Better =
+1. In your WordPress admin panel, go to **Plugins > Add New**
+2. Search for "Auto Image Alt Text Generator For SEO"
+3. Click **Install Now** and then **Activate**
 
-Unlike static bulk editors, this plugin connects to AI to understand the actual image content — not just filenames.
-It produces natural, keyword-aware alt text that improves ranking and readability.
+### From GitHub
 
-= 🧰 How It Works =
+1. Download the [latest release](https://github.com/DigiHatrix/Auto-Image-Alt-Text-Generator-For-SEO-wp/releases)
+2. Upload the plugin folder to `/wp-content/plugins/`
+3. Activate the plugin through the WordPress 'Plugins' menu
 
-1. Install and activate the plugin
-2. Visit **Auto Image Alt Text Generator for SEO** in your WordPress admin menu
-3. View your images with their current alt text status
-4. Click **Bulk Generate** or generate individual images
-5. Sit back — your images are now SEO-optimized automatically!
+### For Development
 
-= 💎 Free vs Pro =
+```bash
+# Clone the repository
+git clone https://github.com/DigiHatrix/Auto-Image-Alt-Text-Generator-For-SEO-wp.git
 
-**Free Plan:**
-* 15 AI generations per month
-* Perfect for small blogs and personal sites
+# Move to wp-content/plugins directory
+mv hs-auto-image-alt-text-generator-for-seo /path/to/wordpress/wp-content/plugins/
 
-**Pro Plan ($10/month):**
-* 100 AI generations per month
-* Ideal for growing businesses and content-heavy sites
+# Activate via WP-CLI
+wp plugin activate hs-auto-image-alt-text-generator-for-seo
+```
 
-= 🔐 Privacy & Security =
+## 🎯 Usage
 
-* Images are processed securely via encrypted API
-* No images are stored on external servers
-* Alt text is saved directly to your WordPress database
-* Fully compliant with WordPress coding standards
+1. After activation, go to **Auto Image Alt Text Generator For SEO** in your WordPress admin menu
+2. View all your images with their current alt text status
+3. Click **Generate** on individual images, or use **Bulk Generate** (Pro) for multiple images
+4. Your images now have AI-generated alt text!
 
-== Installation ==
+## 💎 Free vs Pro
 
-= Automatic Installation =
+| Feature               | Free      | Pro |
+|---------              |------     |-----|
+| AI Generations/Month  | 15        | 100 |
+| Individual Generation | ✅        | ✅ |
+| Bulk Generation       | ❌        | ✅ |
+| Alt Text Viewer       | ✅        | ✅ |
+| Search & Filters      | ✅        | ✅ |
+| **Price**             | **Free**  | **$10/month** |
 
-1. Log in to your WordPress admin panel
-2. Go to **Plugins** > **Add New**
-3. Search for "Auto Image Alt Text Generator for SEO"
-4. Click **Install Now** and then **Activate**
+[Upgrade to Pro →](https://hatrixsolutions.com/auto-image-alt-text-generator-for-seo/)
 
-= Manual Installation =
+## 📋 Licensing Note
 
-1. Download the plugin zip file
-2. Log in to your WordPress admin panel
-3. Go to **Plugins** > **Add New** > **Upload Plugin**
-4. Choose the zip file and click **Install Now**
-5. Click **Activate**
+This plugin is **free and open source** (GPL v2), meaning you're free to use, modify, and distribute the code. However, Pro features require a paid subscription to access our AI API services. The free tier includes 15 generations per month.
 
-= After Activation =
+**What's free:**
+- Plugin code (GPL licensed)
+- 15 AI generations/month
+- All viewer features
 
-1. Go to **Auto Image Alt Text Generator for SEO** in the WordPress admin menu
-2. You'll see all your images with their current alt text status
-3. Use **Bulk Generate** to process multiple images or click **Generate** on individual images
-4. That's it! Your images now have AI-generated alt text
+**What requires payment:**
+- Additional AI generation quota (Pro: 100/month)
+- Access to bulk generation features
 
-== Frequently Asked Questions ==
+## 🛠️ Requirements
 
-= Is the AI accurate? =
+- WordPress 5.0 or higher
+- PHP 7.4 or higher
+- Active internet connection (for AI processing)
 
-Yes! The AI analyzes the actual image content to generate relevant, descriptive alt text. It understands objects, scenes, people, actions, and context.
+## 📸 Screenshots
 
-= How many images can I process? =
+![Dashboard Overview](assets/screenshot-1.png)
+*Alt Text Viewer Dashboard - View all images with their alt text status*
 
-The free plan includes 15 AI generations per month. Pro plan ($10/month) includes 100 generations per month. This resets monthly based on your signup date.
+![Bulk Generation](assets/screenshot-2.png)
+*Bulk Generation in action (Pro feature)*
 
-= Will this slow down my site? =
+## 🔐 Privacy & Security
 
-No. Alt text generation happens on-demand via API, not during page loads. Once generated, alt text is stored in your WordPress database just like manually-entered alt text.
+- ✅ Images processed via secure HTTPS API
+- ✅ No images stored on external servers
+- ✅ Alt text saved directly to WordPress database
+- ✅ Fully compliant with WordPress coding standards
+- ✅ No tracking or data collection
 
-= Can I edit the generated alt text? =
+## 💬 Feedback & Suggestions
 
-Absolutely! Click the **Edit** button next to any image to modify the alt text in WordPress's native media editor.
+While this is a private repository and we're not accepting code contributions at this time, we absolutely welcome your feedback!
 
-= What happens if I run out of generations? =
+**Have an idea or found an issue?**
+- 📧 Email us: support@hatrixsolutions.com
+- 🌐 Submit feedback: [hatrixsolutions.com/support](https://hatrixsolutions.com/support)
 
-You can upgrade to Pro anytime for more monthly generations. Or wait until your limit resets next month.
+Your input helps us improve the plugin for everyone!
 
-= Does this work with WooCommerce, ACF, or other plugins? =
+## 📝 Changelog
 
-Yes! This plugin works with standard WordPress images. Once alt text is generated, it's available everywhere your images are used.
+### 0.1.0 - 2025-10-10
 
-= Is my data secure? =
+- 🎉 Initial release
+- ✨ AI-powered alt text generation
+- 📊 Alt text viewer with grid and table views
+- 🔍 Search and filter functionality
+- 💎 Free and Pro plans
+- ♿ WCAG accessibility compliance
 
-Yes. Images are processed via secure HTTPS API. No images are stored externally. Alt text is saved directly to your WordPress database.
+[View Full Changelog](CHANGELOG.md)
 
-= Can I bulk generate for all images at once? =
+## 🐛 Report an Issue
 
-Pro users can use the bulk generation feature. Free users can generate images individually or upgrade to Pro.
+Found a bug? Please contact our support team:
+- 📧 support@hatrixsolutions.com
+- 🌐 [Support Portal](https://hatrixsolutions.com/support)
 
-= What image formats are supported? =
+Include:
+- WordPress version
+- PHP version
+- Steps to reproduce
+- Expected vs actual behavior
 
-All standard WordPress image formats: JPG, PNG, GIF, WebP.
+## 📄 License
 
-= Do I need an API key? =
+This plugin is licensed under the GPLv2 or later.
 
-No! The plugin works out of the box. Your site automatically connects to our secure API.
+```
+Copyright (C) 2025 Hatrix Solutions
 
-== Screenshots ==
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
 
-1. **Alt Text Viewer Dashboard** - View all images with their alt text status in grid or table view
-2. **Stats Overview** - See total images, missing alt tags, and generation limits at a glance
-3. **Bulk Generation** - Process multiple images with one click (Pro feature)
-4. **Individual Image Controls** - Generate, edit, or clear alt text for any image
-5. **Filter & Search** - Quickly find images missing alt text
-6. **Settings Panel** - Simple configuration and account management
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+```
 
-== Changelog ==
+## 🔗 Links
 
-= 0.1.0 - 2025-10-10 =
-* Initial release
-* Bulk alt text generation
-* Individual image generation
-* Alt text viewer with grid and table views
-* Search and filter functionality
-* Free plan: 15 generations/month
-* Pro plan: 100 generations/month
-* WordPress 6.8 compatibility
-* WCAG accessibility compliance
-* Full WordPress coding standards compliance
+- [WordPress.org Plugin Page](https://wordpress.org/plugins/hs-auto-image-alt-text-generator-for-seo/)
+- [Documentation](https://hatrixsolutions.com/docs/auto-image-alt-text-generator)
+- [Support](https://hatrixsolutions.com/support)
+- [Hatrix Solutions](https://hatrixsolutions.com)
 
-== Upgrade Notice ==
+## 💬 Support
 
-= 0.1.0 =
-Initial release. Start generating AI-powered alt text for your images today!
+Need help? We're here for you:
 
-== Additional Information ==
+- 📧 Email: support@hatrixsolutions.com
+- 🌐 Website: [hatrixsolutions.com/support](https://hatrixsolutions.com/support)
+- 📚 Documentation: [hatrixsolutions.com/docs](https://hatrixsolutions.com/docs)
 
-= Support =
-For support, feature requests, or bug reports, please visit [hatrixsolutions.com/support](https://hatrixsolutions.com/support)
+---
 
-= Credits =
-Developed by [Hatrix Solutions](https://hatrixsolutions.com)
-
-= Privacy Policy =
-Read our privacy policy at [hatrixsolutions.com/privacy](https://hatrixsolutions.com/privacy)
-
+Made with ❤️ by [Hatrix Solutions](https://hatrixsolutions.com)

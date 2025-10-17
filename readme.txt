@@ -1,4 +1,4 @@
-=== Auto Image Alt Text Generator for SEO ===
+=== Auto Image Alt Text Generator For SEO ===
 Contributors: hatrixsolutions
 Tags: alt text, image seo, accessibility, ai, wcag
 Requires at least: 5.0
@@ -8,7 +8,7 @@ Stable tag: 0.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Automatically generate accurate, descriptive alt text for your WordPress images using AI — in bulk or on demand. Improve your SEO, boost accessibility, and save hours.
+Automatically generate AI-powered alt text for WordPress images. Improve SEO, boost accessibility, and save hours with bulk or on-demand generation.
 
 == Description ==
 
