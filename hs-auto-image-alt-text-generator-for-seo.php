@@ -11,7 +11,7 @@
  * Plugin Name: Auto Image Alt Text Generator For SEO
  * Plugin URI:  https://hatrixsolutions.com/auto-alt-text-generator-for-seo
  * Description: Automatically generate and apply alt tags to images using AI.
- * Version:     0.1.0
+ * Version:     1.1.0
  * Author:      Hatrix Solutions
  * Text Domain: hs-auto-image-alt-text-generator-for-seo
  * Domain Path: /languages
@@ -28,7 +28,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AAT_VERSION', '0.1.0');
+define('AAT_VERSION', '1.1.0');
 define('AAT_PLUGIN_FILE', __FILE__);
 define('AAT_PLUGIN_BASENAME', plugin_basename(__FILE__));
 define('AAT_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -47,21 +47,335 @@ function aat_init() {
     // Hook into WordPress
     add_action('admin_menu', 'aat_add_menu');
     add_action('admin_enqueue_scripts', 'aat_enqueue_admin_styles');
+    
+    // Weekly heartbeat to keep site registration updated
+    add_action('admin_init', 'aat_maybe_ping_server');
+    
+    // Admin notices
+    add_action('admin_notices', 'aat_admin_notices');
+    add_action('admin_init', 'aat_handle_notice_dismissal');
 }
 
 register_activation_hook(__FILE__, 'aat_generate_site_id');
+register_deactivation_hook(__FILE__, 'aat_track_deactivation');
+// Note: Uninstall handled by uninstall.php
 
 /**
- * Generate unique site ID on plugin activation
+ * Generate unique site ID on plugin activation and register with central server
  *
  * @since 0.1.0
  * @return void
  */
 function aat_generate_site_id() {
-    if (!get_option('aat_site_id')) {
-        $site_id = wp_generate_uuid4();
+    // Check if site_id exists in WordPress options
+    $site_id = get_option('aat_site_id');
+    $is_fresh_install = empty($site_id);
+    
+    // If no local site_id, check if this site was previously registered on the server
+    if ($is_fresh_install) {
+        $site_url = home_url();
+        
+        // Check server database for existing site_id by URL
+        $api_url = 'https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/get-site-by-url.php';
+        $response = wp_remote_post($api_url, [
+            'headers' => ['Content-Type' => 'application/json'],
+            'body' => wp_json_encode(['site_url' => $site_url]),
+            'timeout' => 10,
+            'blocking' => true, // Must be blocking to get the response
+        ]);
+        
+        if (!is_wp_error($response)) {
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+            if (isset($body['success']) && $body['success'] && !empty($body['site_id'])) {
+                // Site was previously registered - reuse existing site_id
+                $site_id = sanitize_text_field($body['site_id']);
+                $is_fresh_install = false; // It's a reactivation
+            }
+        }
+        
+        // If still no site_id found, generate a new one
+        if (empty($site_id)) {
+            $site_id = wp_generate_uuid4();
+            $is_fresh_install = true;
+        }
+        
+        // Save site_id to WordPress options
         update_option('aat_site_id', sanitize_text_field($site_id));
     }
+    
+    // Register site with central server (this also tracks activation/reactivation events)
+    aat_register_site_with_server($site_id);
+}
+
+/**
+ * Register site with central server
+ *
+ * @since 1.0.0
+ * @param string $site_id The unique site identifier
+ * @return void
+ */
+function aat_register_site_with_server($site_id) {
+    // Get site information
+    $site_url = home_url();
+    $admin_email = get_option('admin_email');
+    $wp_version = get_bloginfo('version');
+    
+    // Get plugin version from header
+    $plugin_data = get_file_data(__FILE__, [
+        'Version' => 'Version'
+    ]);
+    $plugin_version = $plugin_data['Version'] ?? '1.0.0';
+    
+    // Prepare data to send
+    $data = [
+        'site_id' => $site_id,
+        'site_url' => $site_url,
+        'email' => $admin_email,
+        'wp_version' => $wp_version,
+        'plugin_version' => $plugin_version,
+    ];
+    
+    // Send registration to central server
+    $response = wp_remote_post('https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/register-site.php', [
+        'headers' => ['Content-Type' => 'application/json'],
+        'body' => wp_json_encode($data),
+        'timeout' => 10,
+        'blocking' => false, // Non-blocking to avoid slowing down activation
+    ]);
+    
+    // Note: Using non-blocking request so activation isn't delayed
+    // Registration will happen in background
+}
+
+/**
+ * Track plugin deactivation
+ *
+ * @since 1.0.0
+ * @return void
+ */
+function aat_track_deactivation() {
+    $site_id = get_option('aat_site_id');
+    if (!$site_id) {
+        return;
+    }
+    
+    // Get plugin version
+    $plugin_data = get_file_data(__FILE__, ['Version' => 'Version']);
+    $plugin_version = $plugin_data['Version'] ?? '1.0.0';
+    
+    // Send deactivation event to server
+    wp_remote_post('https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/track-event.php', [
+        'headers' => ['Content-Type' => 'application/json'],
+        'body' => wp_json_encode([
+            'site_id' => $site_id,
+            'event_type' => 'deactivation',
+            'site_url' => home_url(),
+            'plugin_version' => $plugin_version,
+            'timestamp' => gmdate('Y-m-d H:i:s')
+        ]),
+        'timeout' => 5,
+        'blocking' => false, // Non-blocking so deactivation isn't delayed
+    ]);
+}
+
+/**
+ * Display admin notices
+ *
+ * @since 1.1.0
+ * @return void
+ */
+function aat_admin_notices() {
+    // Only show on admin pages
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    
+    // Welcome notice (after activation)
+    aat_show_welcome_notice();
+    
+    // Feedback request (after 10 generations)
+    aat_show_feedback_notice();
+}
+
+/**
+ * Show welcome notice after plugin activation
+ *
+ * @since 1.1.0
+ * @return void
+ */
+function aat_show_welcome_notice() {
+    // Check if already dismissed
+    if (get_option('aat_welcome_dismissed')) {
+        return;
+    }
+    
+    // Check if activation was recent (within 7 days)
+    $site_id = get_option('aat_site_id');
+    if (!$site_id) {
+        return;
+    }
+    
+    // Check if we should show (only show once, within first week)
+    $activation_time = get_option('aat_activation_time');
+    if (!$activation_time) {
+        update_option('aat_activation_time', time());
+        $activation_time = time();
+    }
+    
+    // Don't show if more than 7 days old
+    if ((time() - $activation_time) > (7 * DAY_IN_SECONDS)) {
+        update_option('aat_welcome_dismissed', true);
+        return;
+    }
+    
+    $plugin_page_url = admin_url('admin.php?page=auto-alt-tagger');
+    $dismiss_url = wp_nonce_url(
+        add_query_arg('aat_dismiss_notice', 'welcome'),
+        'aat_dismiss_notice',
+        'aat_notice_nonce'
+    );
+    
+    ?>
+    <div class="notice notice-success is-dismissible" id="aat-welcome-notice">
+        <h2>🎉 <?php echo esc_html__('Welcome to Auto Image Alt Text Generator!', 'hs-auto-image-alt-text-generator-for-seo'); ?></h2>
+        <p><?php echo esc_html__('Thank you for installing our plugin! You\'re now ready to automatically generate SEO-optimized alt text for your images.', 'hs-auto-image-alt-text-generator-for-seo'); ?></p>
+        <p>
+            <strong><?php echo esc_html__('Quick Start:', 'hs-auto-image-alt-text-generator-for-seo'); ?></strong>
+        </p>
+        <ol style="margin-left: 20px;">
+            <li><?php echo esc_html__('Visit the plugin dashboard to see all your images', 'hs-auto-image-alt-text-generator-for-seo'); ?></li>
+            <li><?php echo esc_html__('Click "Generate" on any image to create AI-powered alt text', 'hs-auto-image-alt-text-generator-for-seo'); ?></li>
+            <li><?php echo esc_html__('Use "Bulk Generate" to process multiple images at once', 'hs-auto-image-alt-text-generator-for-seo'); ?></li>
+        </ol>
+        <p>
+            <a href="<?php echo esc_url($plugin_page_url); ?>" class="button button-primary">
+                <?php echo esc_html__('Go to Dashboard', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+            </a>
+            <a href="<?php echo esc_url($dismiss_url); ?>" class="button button-secondary">
+                <?php echo esc_html__('Dismiss', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+            </a>
+        </p>
+    </div>
+    <style>
+        #aat-welcome-notice h2 { margin: 0.5em 0; }
+        #aat-welcome-notice ol { margin: 0.5em 0 1em 0; }
+    </style>
+    <?php
+}
+
+/**
+ * Show feedback request after 10 generations
+ *
+ * @since 1.1.0
+ * @return void
+ */
+function aat_show_feedback_notice() {
+    // Check if already dismissed
+    if (get_option('aat_feedback_dismissed')) {
+        return;
+    }
+    
+    // Check if user has at least 10 generations
+    $usage = aat_get_monthly_usage();
+    if (!$usage || $usage < 10) {
+        return;
+    }
+    
+    // Check if we've already shown this
+    if (get_option('aat_feedback_shown')) {
+        return;
+    }
+    
+    // Mark as shown so it only appears once
+    update_option('aat_feedback_shown', true);
+    
+    $feedback_url = 'https://hatrixsolutions.com/support';
+    $dismiss_url = wp_nonce_url(
+        add_query_arg('aat_dismiss_notice', 'feedback'),
+        'aat_dismiss_notice',
+        'aat_notice_nonce'
+    );
+    
+    ?>
+    <div class="notice notice-info is-dismissible" id="aat-feedback-notice">
+        <h3>⭐ <?php echo esc_html__('Enjoying Auto Alt Text Generator?', 'hs-auto-image-alt-text-generator-for-seo'); ?></h3>
+        <p>
+            <?php
+            echo esc_html__('You\'ve generated alt text for 10+ images! We\'d love to hear your feedback.', 'hs-auto-image-alt-text-generator-for-seo');
+            ?>
+        </p>
+        <p>
+            <?php echo esc_html__('Help us improve by sharing your experience, feature requests, or any issues you\'ve encountered.', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+        </p>
+        <p>
+            <a href="<?php echo esc_url($feedback_url); ?>" class="button button-primary" target="_blank">
+                <?php echo esc_html__('Share Feedback', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+            </a>
+            <a href="<?php echo esc_url($dismiss_url); ?>" class="button button-secondary">
+                <?php echo esc_html__('Maybe Later', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+            </a>
+        </p>
+    </div>
+    <?php
+}
+
+/**
+ * Handle notice dismissal
+ *
+ * @since 1.1.0
+ * @return void
+ */
+function aat_handle_notice_dismissal() {
+    // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified below
+    if (!isset($_GET['aat_dismiss_notice']) || !isset($_GET['aat_notice_nonce'])) {
+        return;
+    }
+    
+    // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified below
+    $nonce = sanitize_text_field(wp_unslash($_GET['aat_notice_nonce']));
+    if (!wp_verify_nonce($nonce, 'aat_dismiss_notice')) {
+        return;
+    }
+    
+    // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified above
+    $notice_type = sanitize_text_field(wp_unslash($_GET['aat_dismiss_notice']));
+    
+    if ($notice_type === 'welcome') {
+        update_option('aat_welcome_dismissed', true);
+    } elseif ($notice_type === 'feedback') {
+        update_option('aat_feedback_dismissed', true);
+    }
+    
+    // Redirect to remove query params
+    wp_safe_redirect(remove_query_arg(['aat_dismiss_notice', 'aat_notice_nonce']));
+    exit;
+}
+
+/**
+ * Periodic heartbeat to update site registration (runs weekly)
+ *
+ * @since 1.0.0
+ * @return void
+ */
+function aat_maybe_ping_server() {
+    $last_ping = get_option('aat_last_server_ping');
+    $one_week = 7 * DAY_IN_SECONDS;
+    
+    // Only ping once per week
+    if ($last_ping && (time() - $last_ping) < $one_week) {
+        return;
+    }
+    
+    $site_id = get_option('aat_site_id');
+    if (!$site_id) {
+        return;
+    }
+    
+    // Update last ping time
+    update_option('aat_last_server_ping', time());
+    
+    // Register/update site info
+    aat_register_site_with_server($site_id);
 }
 
 /**
@@ -96,10 +410,13 @@ function aat_enqueue_admin_styles(string $hook): void {
         return;
     }
     
+    // Ensure dashicons is loaded
+    wp_enqueue_style('dashicons');
+    
     wp_enqueue_style(
         'aat-admin-style',
         AAT_PLUGIN_URL . 'assets/admin-style.css',
-        array(),
+        array('dashicons'),
         AAT_VERSION
     );
     
@@ -272,7 +589,6 @@ function aat_is_developer_environment() {
 function aat_check_developer_auth() {
     // Check for developer authentication token in cookie
     if (!isset($_COOKIE['aat_dev_token'])) {
-        error_log("AAT Dev Check: No dev token cookie found");
         return false;
     }
     
@@ -281,7 +597,6 @@ function aat_check_developer_auth() {
     
     // Validate token format (should be a 64-char hash)
     if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
-        error_log("AAT Dev Check: Invalid token format");
         return false;
     }
     
@@ -297,14 +612,11 @@ function aat_check_developer_auth() {
     ]);
     
     if (is_wp_error($response)) {
-        error_log("AAT Dev Check: API request failed - " . $response->get_error_message());
         return false;
     }
     
     $body = json_decode(wp_remote_retrieve_body($response), true);
     $is_authenticated = isset($body['authenticated']) && $body['authenticated'] === true;
-    
-    error_log("AAT Dev Check: Token validation result - " . ($is_authenticated ? 'TRUE' : 'FALSE'));
     
     return $is_authenticated;
 }
@@ -426,13 +738,11 @@ function aat_get_monthly_usage() {
     ]);
     
     if (is_wp_error($response)) {
-        error_log('AAT Get Usage API Error: ' . $response->get_error_message());
         return 0;
     }
     
     $body = json_decode(wp_remote_retrieve_body($response), true);
     if (!isset($body['success']) || !$body['success']) {
-        error_log('AAT Get Usage API Failed: ' . wp_json_encode($body));
         return 0;
     }
     
@@ -461,7 +771,6 @@ function aat_get_next_reset_date($site_id = null) {
 function aat_increment_monthly_usage($image_url = null) {
     $site_id = get_option('aat_site_id');
     if (!$site_id || !$image_url) {
-        error_log("AAT Usage Tracking: Missing site_id or image_url, cannot track usage");
         return 0;
     }
     
@@ -472,8 +781,6 @@ function aat_increment_monthly_usage($image_url = null) {
     
     // Get updated count from API
     $new_count = aat_get_monthly_usage();
-    
-    error_log("AAT Usage Tracking: Usage tracked via API for site {$site_id}, image {$image_url}, new monthly total: {$new_count}");
     
     return $new_count;
 }
@@ -591,6 +898,32 @@ function aat_get_remaining_by_plan() {
 add_action('wp_ajax_aat_scan_and_tag', 'aat_scan_and_tag');
 
 /**
+ * Check rate limiting for AJAX requests
+ * Allows 60 requests per minute (suitable for bulk operations)
+ *
+ * @since 1.1.0
+ * @param string $action Action identifier
+ * @return bool True if allowed, false if rate limited
+ */
+function aat_check_rate_limit(string $action): bool {
+    $user_id = get_current_user_id();
+    if (!$user_id) {
+        return false;
+    }
+    
+    $transient_key = 'aat_rate_limit_' . $action . '_' . $user_id;
+    $attempts = get_transient($transient_key);
+    
+    // Allow 60 requests per minute (1 per second average, suitable for bulk)
+    if ($attempts && $attempts > 60) {
+        return false;
+    }
+    
+    set_transient($transient_key, ($attempts ? $attempts + 1 : 1), MINUTE_IN_SECONDS);
+    return true;
+}
+
+/**
  * AJAX handler for scanning and tagging images
  *
  * @since 0.1.0
@@ -607,6 +940,12 @@ function aat_scan_and_tag(): void {
     // Check user capabilities
     if (!current_user_can('manage_options')) {
         wp_send_json_error(__('Insufficient permissions', 'hs-auto-image-alt-text-generator-for-seo'));
+        return;
+    }
+    
+    // Check rate limiting
+    if (!aat_check_rate_limit('scan_and_tag')) {
+        wp_send_json_error(__('Too many requests. Please wait a moment and try again.', 'hs-auto-image-alt-text-generator-for-seo'));
         return;
     }
     
@@ -681,7 +1020,6 @@ function aat_scan_and_tag(): void {
 		]);
 
 		if (is_wp_error($response)) { 
-			error_log('API Error: ' . $response->get_error_message());
 			continue;
 		}
 			
@@ -869,7 +1207,7 @@ function aat_render_stats_cards($data) {
 			<div class="aat-stat-label"><?php echo $is_pro ? 'Pro' : 'Free' ?> Generations Left</div>
 			<div class="aat-stat-note"><?php echo absint($limits['current_limit']) ?> per month</div>
 			<?php if (!$is_pro): ?>
-			<div class="aat-upgrade-text" style="margin-top: 8px; padding: 6px 8px; background: rgba(34, 113, 177, 0.1); border-radius: 4px; border-left: 3px solid #2271b1; transition: all 0.2s ease; cursor: pointer;" onmouseover="this.style.background='rgba(34, 113, 177, 0.15)'" onmouseout="this.style.background='rgba(34, 113, 177, 0.1)'" onclick="window.open('https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?site_id=<?php echo esc_attr(urlencode(get_option('aat_site_id'))) ?>', '_blank')">
+			<div class="aat-upgrade-text" style="margin-top: 8px; padding: 6px 8px; background: rgba(34, 113, 177, 0.1); border-radius: 4px; border-left: 3px solid #2271b1; transition: all 0.2s ease; cursor: pointer;" onmouseover="this.style.background='rgba(34, 113, 177, 0.15)'" onmouseout="this.style.background='rgba(34, 113, 177, 0.1)'" onclick="window.open('https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?client_reference_id=<?php echo esc_attr(urlencode(get_option('aat_site_id'))) ?>', '_blank')">
 				<span style="color: #2271b1; text-decoration: none; font-size: 11px; font-weight: 500; display: block; line-height: 1.4;">
 					🚀 Upgrade to Pro ($10/month) for 100 Generations per Month
 				</span>
@@ -925,7 +1263,7 @@ function aat_render_bulk_actions() {
 					Bulk Generate Missing Alt Tags
 				</button>
 					<span class="aat-bulk-info">
-						<a href="<?php echo esc_url('https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?site_id=' . urlencode(get_option('aat_site_id'))) ?>" target="_blank">Upgrade to Pro ($10/month)</a> to use bulk actions
+						<a href="<?php echo esc_url('https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?client_reference_id=' . urlencode(get_option('aat_site_id'))) ?>" target="_blank">Upgrade to Pro ($10/month)</a> to use bulk actions
 					</span>
 			</div>
 			<p class="aat-bulk-note"><strong>Note:</strong> This will use AI to generate alt tags for images without them.</p>
@@ -1139,11 +1477,13 @@ function aat_viewer_page() {
 										<?php endif; ?>
 									</div>
 									
-									<div class="aat-image-actions">
-										<button class="aat-btn aat-btn-primary generate-alt" data-id="<?php echo absint($image->ID) ?>">
-											<span class="dashicons dashicons-superhero"></span>
-											Generate
-										</button>
+								<div class="aat-image-actions">
+									<button class="aat-btn aat-btn-primary generate-alt" data-id="<?php echo absint($image->ID) ?>">
+										<svg class="aat-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+											<path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/>
+										</svg>
+										<?php echo $has_alt ? 'Regenerate' : 'Generate' ?>
+									</button>
 										<a href="<?php echo esc_url(get_edit_post_link($image->ID)) ?>" target="_blank" class="aat-btn aat-btn-link">
 											<span class="dashicons dashicons-edit"></span>
 											Edit
@@ -1206,11 +1546,13 @@ if (!$thumb_url) {
 											</span>
 										</td>
 										<td>
-											<div class="aat-table-actions">
-												<button class="aat-btn aat-btn-primary generate-alt" data-id="<?php echo absint($image->ID) ?>">
-													<span class="dashicons dashicons-superhero"></span>
-													Generate
-												</button>
+										<div class="aat-table-actions">
+											<button class="aat-btn aat-btn-primary generate-alt" data-id="<?php echo absint($image->ID) ?>">
+												<svg class="aat-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+													<path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/>
+												</svg>
+												<?php echo $has_alt ? 'Regenerate' : 'Generate' ?>
+											</button>
 												<a href="<?php echo esc_url(get_edit_post_link($image->ID)) ?>" target="_blank" class="aat-btn aat-btn-link">
 													<span class="dashicons dashicons-edit"></span>
 													Edit
@@ -1377,7 +1719,7 @@ if (!$thumb_url) {
 					</div>
 					<p>Want 100 generations per month? Upgrade to Pro for just <strong>$10/month</strong>!</p>
 					<div class="aat-upgrade-buttons">
-						<a href="#" class="aat-upgrade-btn primary" onclick="window.open('https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?site_id=<?php echo esc_js(get_option('aat_site_id')) ?>', '_blank')">
+						<a href="#" class="aat-upgrade-btn primary" onclick="window.open('https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?client_reference_id=<?php echo esc_js(get_option('aat_site_id')) ?>', '_blank')">
 							🔥 Upgrade to Pro
 						</a>
 						<button class="aat-upgrade-btn secondary" onclick="closeUpgradePopup()">
@@ -1651,6 +1993,12 @@ function aat_generate_single(): void {
         return;
     }
     
+    // Check rate limiting
+    if (!aat_check_rate_limit('generate_single')) {
+        wp_send_json_error(__('Too many requests. Please wait a moment and try again.', 'hs-auto-image-alt-text-generator-for-seo'));
+        return;
+    }
+    
     // Check if user can generate
     if (!aat_can_generate_free()) {
         $next_reset = aat_get_next_reset_date();
@@ -1748,6 +2096,12 @@ function aat_clear_alt(): void {
         return;
     }
     
+    // Check rate limiting
+    if (!aat_check_rate_limit('clear_alt')) {
+        wp_send_json_error(__('Too many requests. Please wait a moment and try again.', 'hs-auto-image-alt-text-generator-for-seo'));
+        return;
+    }
+    
     // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified above
     $image_id = isset($_GET['image_id']) ? absint($_GET['image_id']) : 0;
     
@@ -1773,16 +2127,9 @@ function aat_clear_alt(): void {
             'timeout' => 15,
         ]);
         
-        // Log any API errors but don't fail the main operation
-        if (is_wp_error($response)) {
-            error_log('AAT Clear Usage API Error: ' . $response->get_error_message());
-        } else {
+        // Clear usage tracking via API (non-blocking)
+        if (!is_wp_error($response)) {
             $body = json_decode(wp_remote_retrieve_body($response), true);
-            if (!$body['success']) {
-                error_log('AAT Clear Usage API Failed: ' . ($body['error'] ?? 'Unknown error'));
-            } else {
-                error_log('AAT Clear Usage: Removed usage record for ' . $image_url);
-            }
         }
     }
     

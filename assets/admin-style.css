@@ -403,12 +403,18 @@
 .aat-images-table th {
 	background: #f6f7f7;
 	font-weight: 600;
-	padding: 12px;
+	padding: 10px;
 }
 
 .aat-images-table td {
-	padding: 12px;
+	padding: 10px;
 	vertical-align: middle;
+}
+
+/* Actions column needs more space */
+.aat-images-table td:last-child {
+	min-width: 280px;
+	white-space: nowrap;
 }
 
 .aat-table-thumb {
@@ -458,8 +464,8 @@
 
 .aat-table-actions {
 	display: flex;
-	gap: 5px;
-	flex-wrap: wrap;
+	gap: 4px;
+	flex-wrap: nowrap;
 }
 
 .has-alt-row {
@@ -611,36 +617,60 @@
 
 .aat-image-actions {
 	display: flex;
-	gap: 8px;
+	gap: 6px;
 	flex-wrap: wrap;
 }
 
 .aat-btn {
 	display: inline-flex;
 	align-items: center;
-	gap: 5px;
-	padding: 6px 12px;
+	gap: 4px;
+	padding: 6px 10px;
 	border: none;
 	border-radius: 4px;
 	font-size: 12px;
+	line-height: 14px;
 	font-weight: 500;
 	text-decoration: none;
 	cursor: pointer;
 	transition: all 0.2s;
+	white-space: nowrap;
+	vertical-align: middle;
 }
 
-.aat-btn-primary {
-	background: #2271b1;
-	color: #fff;
+.aat-btn-primary,
+button.aat-btn-primary,
+.aat-btn.aat-btn-primary {
+	background: #2271b1 !important;
+	color: #fff !important;
+	border-color: #2271b1 !important;
 }
 
-.aat-btn-primary:hover {
-	background: #00a32a;
-	color: #fff;
+.aat-btn-primary:hover,
+button.aat-btn-primary:hover,
+.aat-btn.aat-btn-primary:hover {
+	background: #00a32a !important;
+	color: #fff !important;
+	border-color: #00a32a !important;
 }
 
-.aat-btn-primary:hover .dashicons-superhero {
-	color: #fff;
+/* Force white color for icons in primary buttons */
+.aat-btn-primary .dashicons,
+.aat-btn.aat-btn-primary .dashicons,
+button.aat-btn-primary .dashicons,
+.aat-btn-primary .aat-icon,
+.aat-btn.aat-btn-primary .aat-icon,
+button.aat-btn-primary .aat-icon {
+	color: #fff !important;
+}
+
+.aat-btn-primary:hover .dashicons,
+.aat-btn.aat-btn-primary:hover .dashicons,
+button.aat-btn-primary:hover .dashicons,
+.aat-btn-primary:hover .aat-icon,
+.aat-btn.aat-btn-primary:hover .aat-icon,
+button.aat-btn-primary:hover .aat-icon {
+	color: #fff !important;
 }
 
 .aat-btn-secondary {
@@ -674,10 +704,29 @@
 	color: #fff;
 }
 
+/* SVG Icon Styles */
+.aat-btn .aat-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	display: inline-block;
+	vertical-align: middle;
+}
+
+/* Dashicons fallback (for other buttons like Edit) */
 .aat-btn .dashicons {
 	font-size: 14px;
 	width: 14px;
 	height: 14px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.aat-btn .dashicons::before {
+	line-height: 1;
 }
 
 /* Modal Styles */

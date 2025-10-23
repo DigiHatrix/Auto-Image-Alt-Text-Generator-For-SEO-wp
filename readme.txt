@@ -4,7 +4,7 @@ Tags: alt text, image seo, accessibility, ai, wcag
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -140,8 +140,26 @@ No! The plugin works out of the box. Your site automatically connects to our sec
 
 == Changelog ==
 
-= 0.1.0 - 2025-10-10 =
-* Initial release
+= 1.1.0 - 2025-01-19 =
+* Enhanced: Plugin lifecycle tracking (activation, deactivation, reactivation, uninstall)
+* Enhanced: Automatic site registration with central server
+* Enhanced: Site ID preservation across reinstalls
+* Enhanced: Developer analytics dashboard with comprehensive metrics
+* Enhanced: Pro upgrade tracking via Stripe integration
+* Enhanced: Event history tracking with version information
+* Improved: Button styling and icon alignment
+* Improved: Custom SVG icons for better cross-site compatibility
+* Improved: UTC timezone consistency across all tracking
+* Fixed: Site ID regeneration on reactivation
+* Fixed: Plugin versioning in event logs
+* Added: Rate limiting for AJAX endpoints (60 requests/minute)
+* Added: Weekly heartbeat for site status updates
+* Added: Welcome notice after activation with quick start guide
+* Added: Feedback request after 10 generations
+* Added: Dismissible admin notices with persistent tracking
+
+= 1.0.0 - 2024-12-01 =
+* Initial public release
 * Bulk alt text generation
 * Individual image generation
 * Alt text viewer with grid and table views
@@ -154,8 +172,8 @@ No! The plugin works out of the box. Your site automatically connects to our sec
 
 == Upgrade Notice ==
 
-= 0.1.0 =
-Initial release. Start generating AI-powered alt text for your images today!
+= 1.1.0 =
+Major update with enhanced tracking, developer analytics, and improved cross-site compatibility. Upgrade recommended for better performance and reliability.
 
 == Additional Information ==
 
