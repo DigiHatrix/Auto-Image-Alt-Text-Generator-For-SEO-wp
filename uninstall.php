@@ -44,11 +44,16 @@ delete_option('aat_activation_time');
 delete_option('aat_welcome_dismissed');
 delete_option('aat_feedback_dismissed');
 delete_option('aat_feedback_shown');
+delete_option('aat_low_credits_dismissed');
+delete_option('aat_low_credits_dismissed_month');
 
 // Clean up transients (rate limiting and cached data)
 global $wpdb;
 
 // Delete all transients starting with 'aat_'
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+// Direct query necessary: WordPress has no function to delete transients by prefix
+// Caching not applicable: This runs during plugin uninstall
 $wpdb->query(
     $wpdb->prepare(
         "DELETE FROM $wpdb->options WHERE option_name LIKE %s OR option_name LIKE %s",
@@ -56,6 +61,7 @@ $wpdb->query(
         $wpdb->esc_like('_transient_timeout_aat_') . '%'
     )
 );
+// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 // Optional: Remove user meta (notice dismissals per user)
 // Uncomment if you add per-user notice tracking in the future

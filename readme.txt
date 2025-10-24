@@ -156,7 +156,9 @@ No! The plugin works out of the box. Your site automatically connects to our sec
 * Added: Weekly heartbeat for site status updates
 * Added: Welcome notice after activation with quick start guide
 * Added: Feedback request after 10 generations
+* Added: Low credits warning for free users (triggers at ≤3 remaining)
 * Added: Dismissible admin notices with persistent tracking
+* Added: Monthly reset for low credits notice (reminds each month)
 
 = 1.0.0 - 2024-12-01 =
 * Initial public release

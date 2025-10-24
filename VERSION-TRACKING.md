@@ -105,6 +105,7 @@ Before releasing a new version:
 - Added: Weekly heartbeat for site status updates
 - Added: Welcome notice after plugin activation (dismissible, 7-day window)
 - Added: Feedback request after 10 generations (dismissible, one-time)
+- Added: Low credits warning for free users (≤3 generations remaining, resets monthly)
 - Added: Dedicated `uninstall.php` for reliable cleanup
 
 **Files Modified:**
