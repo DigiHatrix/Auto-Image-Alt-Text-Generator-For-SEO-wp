@@ -13,7 +13,7 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
     exit;
 }
 
-// Track uninstall event with central server
+// Track uninstall event (also updates plugin_sites table automatically)
 $site_id = get_option('aat_site_id');
 if ($site_id) {
     // Get plugin version from main file
@@ -21,7 +21,7 @@ if ($site_id) {
     $plugin_data = get_file_data($plugin_file, ['Version' => 'Version']);
     $plugin_version = $plugin_data['Version'] ?? '1.1.0';
     
-    // Send uninstall event to server (blocking to ensure it's tracked)
+    // Send uninstall event (track-event.php also updates plugin_sites table)
     wp_remote_post('https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/track-event.php', [
         'headers' => ['Content-Type' => 'application/json'],
         'body' => wp_json_encode([
@@ -32,7 +32,7 @@ if ($site_id) {
             'timestamp' => gmdate('Y-m-d H:i:s')
         ]),
         'timeout' => 5,
-        'blocking' => true,
+        'blocking' => true, // Blocking to ensure it's tracked before cleanup
     ]);
 }
 
@@ -41,6 +41,7 @@ delete_option('aat_site_id');
 delete_option('aat_user_email');
 delete_option('aat_last_server_ping');
 delete_option('aat_activation_time');
+delete_option('aat_external_service_notice_dismissed');
 delete_option('aat_welcome_dismissed');
 delete_option('aat_feedback_dismissed');
 delete_option('aat_feedback_shown');

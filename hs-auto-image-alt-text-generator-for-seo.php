@@ -11,7 +11,7 @@
  * Plugin Name: Auto Image Alt Text Generator For SEO
  * Plugin URI:  https://hatrixsolutions.com/auto-alt-text-generator-for-seo
  * Description: Automatically generate and apply alt tags to images using AI.
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      Hatrix Solutions
  * Text Domain: hs-auto-image-alt-text-generator-for-seo
  * Domain Path: /languages
@@ -28,7 +28,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AAT_VERSION', '1.1.0');
+define('AAT_VERSION', '1.1.1');
 define('AAT_PLUGIN_FILE', __FILE__);
 define('AAT_PLUGIN_BASENAME', plugin_basename(__FILE__));
 define('AAT_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -152,6 +152,7 @@ function aat_register_site_with_server($site_id) {
 
 /**
  * Track plugin deactivation
+ * Note: track-event.php automatically updates plugin_sites table too
  *
  * @since 1.0.0
  * @return void
@@ -166,7 +167,7 @@ function aat_track_deactivation() {
     $plugin_data = get_file_data(__FILE__, ['Version' => 'Version']);
     $plugin_version = $plugin_data['Version'] ?? '1.0.0';
     
-    // Send deactivation event to server
+    // Send deactivation event (also updates plugin_sites table)
     wp_remote_post('https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/track-event.php', [
         'headers' => ['Content-Type' => 'application/json'],
         'body' => wp_json_encode([
@@ -194,9 +195,15 @@ function aat_admin_notices() {
     }
     
     // Priority order: Show only ONE notice at a time
-    // 1. Low credits (most urgent - user can't generate)
-    // 2. Welcome (important for new users)
-    // 3. Feedback (least urgent)
+    // 1. External service info (on first activation)
+    // 2. Low credits (most urgent - user can't generate)
+    // 3. Welcome (important for new users)
+    // 4. Feedback (least urgent)
+    
+    // Show external service info notice first
+    if (aat_show_external_service_notice()) {
+        return; // External service notice shown, don't show others
+    }
     
     if (aat_show_low_credits_notice()) {
         return; // Low credits shown, don't show others
@@ -207,6 +214,76 @@ function aat_admin_notices() {
     }
     
     aat_show_feedback_notice();
+}
+
+/**
+ * Show external service notice (informational, non-blocking)
+ *
+ * @since 1.1.1
+ * @return bool True if notice was shown, false otherwise
+ */
+function aat_show_external_service_notice() {
+    // Don't show if already dismissed
+    if (get_option('aat_external_service_notice_dismissed')) {
+        return false;
+    }
+    
+    // Only show once after first activation
+    $activation_time = get_option('aat_activation_time');
+    if (!$activation_time) {
+        update_option('aat_activation_time', time());
+    }
+    
+    $dismiss_url = wp_nonce_url(
+        add_query_arg('aat_dismiss_notice', 'external_service'),
+        'aat_dismiss_notice',
+        'aat_notice_nonce'
+    );
+    
+    $plugin_page_url = admin_url('admin.php?page=hs-auto-image-alt-text-generator-for-seo');
+    $readme_url = 'https://wordpress.org/plugins/auto-image-alt-text-generator-for-seo/#description';
+    
+    ?>
+    <div class="notice notice-info is-dismissible" id="aat-external-service-notice">
+        <h3 style="margin: 10px 0;">
+            <span class="dashicons dashicons-info" style="color: #2271b1;"></span>
+            <?php echo esc_html__('Auto Image Alt Text Generator Uses External Services', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+        </h3>
+        <p>
+            <?php echo esc_html__('This plugin connects to external APIs to provide AI-powered alt text generation. Your site URL, WordPress version, and image URLs are sent to our servers for processing.', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+        </p>
+        <p>
+            <strong><?php echo esc_html__('What\'s sent:', 'hs-auto-image-alt-text-generator-for-seo'); ?></strong>
+            <?php echo esc_html__('Site URL, WordPress/plugin versions, image URLs (when generating), usage statistics', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+        </p>
+        <p>
+            <a href="<?php echo esc_url($plugin_page_url); ?>" class="button button-primary">
+                <?php echo esc_html__('Go to Plugin Dashboard', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+            </a>
+            <a href="<?php echo esc_url($readme_url); ?>" target="_blank" class="button button-secondary">
+                <?php echo esc_html__('Learn More About Data Collection', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+            </a>
+            <a href="https://hatrixsolutions.com/privacy" target="_blank" class="button button-secondary">
+                <?php echo esc_html__('Privacy Policy', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+            </a>
+            <a href="<?php echo esc_url($dismiss_url); ?>" class="button button-link">
+                <?php echo esc_html__('Dismiss', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+            </a>
+        </p>
+    </div>
+    <script type="text/javascript">
+    jQuery(document).ready(function($) {
+        $('#aat-external-service-notice').on('click', '.notice-dismiss', function() {
+            $.post(ajaxurl, {
+                action: 'aat_dismiss_notice',
+                notice_type: 'external_service',
+                nonce: '<?php echo esc_js(wp_create_nonce('aat_dismiss_notice')); ?>'
+            });
+        });
+    });
+    </script>
+    <?php
+    return true;
 }
 
 /**
@@ -240,7 +317,7 @@ function aat_show_welcome_notice() {
         return false;
     }
     
-    $plugin_page_url = admin_url('admin.php?page=auto-alt-tagger');
+    $plugin_page_url = admin_url('admin.php?page=hs-auto-image-alt-text-generator-for-seo');
     $dismiss_url = wp_nonce_url(
         add_query_arg('aat_dismiss_notice', 'welcome'),
         'aat_dismiss_notice',
@@ -502,7 +579,9 @@ function aat_handle_notice_dismissal() {
     // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified above
     $notice_type = sanitize_text_field(wp_unslash($_GET['aat_dismiss_notice']));
     
-    if ($notice_type === 'welcome') {
+    if ($notice_type === 'external_service') {
+        update_option('aat_external_service_notice_dismissed', true);
+    } elseif ($notice_type === 'welcome') {
         update_option('aat_welcome_dismissed', true);
     } elseif ($notice_type === 'feedback') {
         update_option('aat_feedback_dismissed', true);
@@ -539,7 +618,10 @@ function aat_ajax_dismiss_notice() {
     $notice_type = isset($_POST['notice_type']) ? sanitize_text_field(wp_unslash($_POST['notice_type'])) : '';
     
     // Dismiss the appropriate notice
-    if ($notice_type === 'welcome') {
+    if ($notice_type === 'external_service') {
+        update_option('aat_external_service_notice_dismissed', true);
+        wp_send_json_success(['message' => 'External service notice dismissed']);
+    } elseif ($notice_type === 'welcome') {
         update_option('aat_welcome_dismissed', true);
         wp_send_json_success(['message' => 'Welcome notice dismissed']);
     } elseif ($notice_type === 'feedback') {
@@ -556,6 +638,7 @@ function aat_ajax_dismiss_notice() {
 
 /**
  * Periodic heartbeat to update site registration (runs weekly)
+ * Purpose: Keeps plugin version and WordPress version updated for compatibility support
  *
  * @since 1.0.0
  * @return void
@@ -592,7 +675,7 @@ function aat_add_menu() {
         __('Auto Alt Text Generator For SEO', 'hs-auto-image-alt-text-generator-for-seo'),
         __('Auto Alt Text Generator For SEO', 'hs-auto-image-alt-text-generator-for-seo'),
         'manage_options',
-        'auto-alt-tagger',
+        'hs-auto-image-alt-text-generator-for-seo',
         'aat_viewer_page',
         'dashicons-format-image',
         80
@@ -609,7 +692,7 @@ function aat_add_menu() {
  */
 function aat_enqueue_admin_styles(string $hook): void {
     // Only load on our plugin pages
-    if ($hook !== 'toplevel_page_auto-alt-tagger') {
+    if ($hook !== 'toplevel_page_hs-auto-image-alt-text-generator-for-seo') {
         return;
     }
     
@@ -1268,7 +1351,7 @@ function aat_scan_and_tag(): void {
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'aat_plugin_action_links');
 
 function aat_plugin_action_links($links) {
-	$settings_link = '<a href="admin.php?page=auto-alt-tagger">Settings</a>';
+	$settings_link = '<a href="admin.php?page=hs-auto-image-alt-text-generator-for-seo">Settings</a>';
 	array_unshift($links, $settings_link);
 	return $links;
 }
@@ -1467,7 +1550,7 @@ function aat_render_filters_form($data) {
 	?>
 	<!-- Filters and Search -->
 	<form method="get" class="aat-filter-form">
-		<input type="hidden" name="page" value="auto-alt-tagger" />
+		<input type="hidden" name="page" value="hs-auto-image-alt-text-generator-for-seo" />
 		<input type="hidden" name="view" value="<?php echo esc_attr($data['view']) ?>" />
 		
 		<div class="aat-control-row">
@@ -1498,7 +1581,7 @@ function aat_render_filters_form($data) {
 			<div class="aat-control-group">
 				<button type="submit" class="button button-primary">Apply Filters</button>
 				<?php if ($data['search'] || $data['filter']): ?>
-					<a href="<?php echo esc_url(admin_url('admin.php?page=auto-alt-tagger')) ?>" class="button">Clear Filters</a>
+					<a href="<?php echo esc_url(admin_url('admin.php?page=hs-auto-image-alt-text-generator-for-seo')) ?>" class="button">Clear Filters</a>
 				<?php endif; ?>
 			</div>
 		</div>
@@ -2103,22 +2186,26 @@ if (!$thumb_url) {
 			const closeBtn = document.querySelector('.aat-modal-close');
 			
 			// Close on X button
-			closeBtn.addEventListener('click', function() {
-				modal.style.display = 'none';
-				document.body.style.overflow = 'auto';
-			});
-			
-			// Close on background click
-			modal.addEventListener('click', function(e) {
-				if (e.target === modal) {
+			if (closeBtn) {
+				closeBtn.addEventListener('click', function() {
 					modal.style.display = 'none';
 					document.body.style.overflow = 'auto';
-				}
-			});
+				});
+			}
+			
+			// Close on background click
+			if (modal) {
+				modal.addEventListener('click', function(e) {
+					if (e.target === modal) {
+						modal.style.display = 'none';
+						document.body.style.overflow = 'auto';
+					}
+				});
+			}
 			
 			// Close on Escape key
 			document.addEventListener('keydown', function(e) {
-				if (e.key === 'Escape' && modal.style.display === 'block') {
+				if (e.key === 'Escape' && modal && modal.style.display === 'block') {
 					modal.style.display = 'none';
 					document.body.style.overflow = 'auto';
 				}
