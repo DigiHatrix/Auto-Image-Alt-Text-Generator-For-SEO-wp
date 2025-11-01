@@ -4,7 +4,7 @@ Tags: alt text, image seo, accessibility, ai, wcag
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,11 +49,11 @@ It produces natural, keyword-aware alt text that improves ranking and readabilit
 = 💎 Free vs Pro =
 
 **Free Plan:**
-* 15 AI generations per month
+* 10 AI generations per month
 * Perfect for small blogs and personal sites
 
 **Pro Plan ($10/month):**
-* 100 AI generations per month
+* 50 AI generations per month
 * Ideal for growing businesses and content-heavy sites
 * Payment processing: Handled securely via Stripe.com
 * Subscriptions: Managed via Stripe's secure payment platform
@@ -139,7 +139,7 @@ Yes! The AI analyzes the actual image content to generate relevant, descriptive 
 
 = How many images can I process? =
 
-The free plan includes 15 AI generations per month. Pro plan ($10/month) includes 100 generations per month. This resets monthly based on your signup date.
+The free plan includes 10 AI generations per month. Pro plan ($10/month) includes 50 generations per month. This resets monthly based on your signup date.
 
 = Will this slow down my site? =
 
@@ -223,7 +223,7 @@ All data is transmitted over secure HTTPS connections. Images are analyzed but n
 * Added: Rate limiting for AJAX endpoints (60 requests/minute)
 * Added: Weekly heartbeat for site status updates
 * Added: Welcome notice after activation with quick start guide
-* Added: Feedback request after 10 generations
+* Added: Feedback request after 5 generations
 * Added: Low credits warning for free users (triggers at ≤3 remaining)
 * Added: Dismissible admin notices with persistent tracking
 * Added: Monthly reset for low credits notice (reminds each month)
@@ -234,8 +234,8 @@ All data is transmitted over secure HTTPS connections. Images are analyzed but n
 * Individual image generation
 * Alt text viewer with grid and table views
 * Search and filter functionality
-* Free plan: 15 generations/month
-* Pro plan: 100 generations/month
+* Free plan: 10 generations/month
+* Pro plan: 50 generations/month
 * WordPress 6.8 compatibility
 * WCAG accessibility compliance
 * Full WordPress coding standards compliance

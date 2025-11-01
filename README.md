@@ -71,7 +71,7 @@ wp plugin activate hs-auto-image-alt-text-generator-for-seo
 
 | Feature               | Free      | Pro |
 |---------              |------     |-----|
-| AI Generations/Month  | 15        | 100 |
+| AI Generations/Month  | 10        | 50 |
 | Individual Generation | ✅        | ✅ |
 | Bulk Generation       | ❌        | ✅ |
 | Alt Text Viewer       | ✅        | ✅ |
@@ -82,11 +82,11 @@ wp plugin activate hs-auto-image-alt-text-generator-for-seo
 
 ## 📋 Licensing Note
 
-This plugin is **free and open source** (GPL v2), meaning you're free to use, modify, and distribute the code. However, Pro features require a paid subscription to access our AI API services. The free tier includes 15 generations per month.
+This plugin is **free and open source** (GPL v2), meaning you're free to use, modify, and distribute the code. However, Pro features require a paid subscription to access our AI API services. The free tier includes 10 generations per month.
 
 **What's free:**
 - Plugin code (GPL licensed)
-- 15 AI generations/month
+- 10 AI generations/month
 - All viewer features
 
 **What requires payment:**
@@ -180,7 +180,7 @@ No — by default, the plugin only generates alt text for images that are missin
 Absolutely! You can edit alt text directly in the Media Library or from the plugin's dashboard.
 
 ### Is there a limit?
-Free users get 15 AI generations per month. Pro users get 100 per month.
+Free users get 10 AI generations per month. Pro users get 100 per month.
 
 ### Does it work with WooCommerce/ACF/other plugins?
 Yes! It works with any WordPress image in the Media Library, regardless of how it was uploaded.

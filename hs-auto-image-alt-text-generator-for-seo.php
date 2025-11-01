@@ -11,7 +11,7 @@
  * Plugin Name: Auto Image Alt Text Generator For SEO
  * Plugin URI:  https://hatrixsolutions.com/auto-alt-text-generator-for-seo
  * Description: Automatically generate and apply alt tags to images using AI.
- * Version:     1.1.1
+ * Version:     1.1.2
  * Author:      Hatrix Solutions
  * Text Domain: hs-auto-image-alt-text-generator-for-seo
  * Domain Path: /languages
@@ -28,7 +28,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AAT_VERSION', '1.1.1');
+define('AAT_VERSION', '1.1.2');
 define('AAT_PLUGIN_FILE', __FILE__);
 define('AAT_PLUGIN_BASENAME', plugin_basename(__FILE__));
 define('AAT_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -62,6 +62,107 @@ function aat_init() {
 register_activation_hook(__FILE__, 'aat_generate_site_id');
 register_deactivation_hook(__FILE__, 'aat_track_deactivation');
 // Note: Uninstall handled by uninstall.php
+
+/**
+ * Fetch plugin configuration from central API
+ * This allows changing pricing/limits without plugin updates
+ * 
+ * @since 1.1.1
+ * @return array Configuration array with limits, pricing, URLs, etc.
+ */
+function aat_get_plugin_config() {
+    // Check cache first (1 hour TTL)
+    $cached_config = get_transient('aat_plugin_config');
+    if ($cached_config !== false) {
+        return $cached_config;
+    }
+    
+    // Fetch from API
+    $api_url = 'https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/get-plugin-config.php';
+    $response = wp_remote_get($api_url, [
+        'timeout' => 5,
+        'sslverify' => true,
+    ]);
+    
+    // Minimal fallback if API completely fails - signals error state
+    $error_fallback = [
+        'limits' => [
+            'free_monthly' => 0,
+            'basic_monthly' => 0,
+            'pro_monthly' => 0
+        ],
+        'pricing' => [
+            'basic_monthly_price' => 0,
+            'basic_monthly_price_display' => 'N/A',
+            'pro_monthly_price' => 0,
+            'pro_monthly_price_display' => 'N/A',
+            'currency' => 'USD'
+        ],
+        'stripe' => [
+            'checkout_url' => '',
+            'customer_portal_url' => ''
+        ],
+        'messages' => [
+            'upgrade_prompt' => 'Service temporarily unavailable',
+            'limit_reached' => 'Service temporarily unavailable',
+            'bulk_action_locked' => 'Service temporarily unavailable'
+        ],
+        'error' => true
+    ];
+    
+    if (is_wp_error($response)) {
+        // Cache error state for 1 minute only (retry sooner)
+        set_transient('aat_plugin_config', $error_fallback, 60);
+        return $error_fallback;
+    }
+    
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+    
+    if (!$data || !isset($data['success']) || !$data['success'] || !isset($data['config'])) {
+        // Cache error state for 1 minute only (retry sooner)
+        set_transient('aat_plugin_config', $error_fallback, 60);
+        return $error_fallback;
+    }
+    
+    $config = $data['config'];
+    
+    // Cache for 1 hour (or use TTL from API)
+    $cache_ttl = isset($config['cache_ttl']) ? intval($config['cache_ttl']) : 3600;
+    set_transient('aat_plugin_config', $config, $cache_ttl);
+    
+    return $config;
+}
+
+/**
+ * Get Stripe checkout URL with site_id
+ * 
+ * @since 1.1.1
+ * @return string Stripe checkout URL
+ */
+function aat_get_stripe_checkout_url() {
+    $config = aat_get_plugin_config();
+    $base_url = $config['stripe']['checkout_url'] ?? '';
+    
+    if (empty($base_url)) {
+        return '#'; // Return # if no URL configured (prevents broken links)
+    }
+    
+    $site_id = get_option('aat_site_id');
+    return $base_url . '?client_reference_id=' . urlencode($site_id);
+}
+
+/**
+ * Get Stripe customer portal URL
+ * 
+ * @since 1.1.1
+ * @return string Stripe customer portal URL
+ */
+function aat_get_stripe_portal_url() {
+    $config = aat_get_plugin_config();
+    $portal_url = $config['stripe']['customer_portal_url'] ?? '';
+    return !empty($portal_url) ? $portal_url : '#';
+}
 
 /**
  * Generate unique site ID on plugin activation and register with central server
@@ -378,7 +479,7 @@ function aat_show_feedback_notice() {
     
     // Check if user has at least 10 generations
     $usage = aat_get_monthly_usage();
-    if (!$usage || $usage < 10) {
+    if (!$usage || $usage < 5) {
         return false;
     }
     
@@ -439,8 +540,7 @@ function aat_show_feedback_notice() {
  * @return string The upgrade URL
  */
 function aat_get_upgrade_url() {
-    $site_id = get_option('aat_site_id');
-    return 'https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?client_reference_id=' . urlencode($site_id);
+    return aat_get_stripe_checkout_url();
 }
 
 /**
@@ -473,7 +573,8 @@ function aat_show_low_credits_notice() {
     
     // Get remaining generations
     $usage = aat_get_monthly_usage();
-    $free_limit = 15;
+    $config = aat_get_plugin_config();
+    $free_limit = $config['limits']['free_monthly'] ?? 5;
     $remaining = $free_limit - $usage;
     
     // Only show if 3 or fewer generations remaining
@@ -496,10 +597,14 @@ function aat_show_low_credits_notice() {
         <div class="notice notice-error" id="aat-low-credits-notice">
             <h3>⚠️ <?php echo esc_html__('No Generations Remaining', 'hs-auto-image-alt-text-generator-for-seo'); ?></h3>
             <p>
-                <strong><?php echo esc_html__('You\'ve used all 15 free alt text generations this month.', 'hs-auto-image-alt-text-generator-for-seo'); ?></strong>
+                <strong><?php echo esc_html__('You\'ve used all 5 free alt text generations this month.', 'hs-auto-image-alt-text-generator-for-seo'); ?></strong>
             </p>
             <p>
-                <?php echo esc_html__('Upgrade to Pro to get 100 generations per month and unlock bulk generation features.', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+                <?php 
+                $config = aat_get_plugin_config();
+                $pro_limit = $config['limits']['pro_monthly'] ?? 50;
+                echo esc_html(sprintf(__('Upgrade to Pro to get %d generations per month and unlock bulk generation features.', 'hs-auto-image-alt-text-generator-for-seo'), $pro_limit)); 
+                ?>
             </p>
             <p>
                 <a href="<?php echo esc_url($upgrade_url); ?>" class="button button-primary" target="_blank">
@@ -528,11 +633,19 @@ function aat_show_low_credits_notice() {
                 </strong>
             </p>
             <p>
-                <?php echo esc_html__('Upgrade to Pro for 100 generations per month, bulk processing, and priority support.', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+                <?php 
+                $config = aat_get_plugin_config();
+                $pro_limit = $config['limits']['pro_monthly'] ?? 50;
+                echo esc_html(sprintf(__('Upgrade to Pro for %d generations per month, bulk processing, and priority support.', 'hs-auto-image-alt-text-generator-for-seo'), $pro_limit)); 
+                ?>
             </p>
             <p>
+                <?php
+                $config = aat_get_plugin_config();
+                $price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
+                ?>
                 <a href="<?php echo esc_url($upgrade_url); ?>" class="button button-primary" target="_blank">
-                    <?php echo esc_html__('Upgrade to Pro - Only $10/month', 'hs-auto-image-alt-text-generator-for-seo'); ?>
+                    <?php echo esc_html(sprintf(__('Upgrade to Pro - Only %s/month', 'hs-auto-image-alt-text-generator-for-seo'), $price_display)); ?>
                 </a>
                 <a href="<?php echo esc_url($dismiss_url); ?>" class="button button-secondary">
                     <?php echo esc_html__('Dismiss', 'hs-auto-image-alt-text-generator-for-seo'); ?>
@@ -723,6 +836,101 @@ function aat_register_settings() {
         'sanitize_callback' => 'sanitize_email',
         'default' => ''
     ]);
+    
+    // Handle email update via API when settings are saved
+    // Use both hooks to catch Settings API saves and direct option updates
+    add_action('update_option_aat_user_email', 'aat_update_email_on_server', 10, 2);
+    add_action('admin_init', 'aat_maybe_update_email_on_save', 20); // Run after Settings API processes
+}
+
+/**
+ * Check if email was updated via Settings API and sync to server
+ * 
+ * @since 1.1.1
+ * @return void
+ */
+function aat_maybe_update_email_on_save() {
+    // Only run on our settings page
+    $current_screen = get_current_screen();
+    if (!$current_screen || strpos($current_screen->id, 'hs-auto-image-alt-text-generator-for-seo') === false) {
+        return;
+    }
+    
+    // Check if settings form was submitted
+    if (!isset($_POST['option_page']) || $_POST['option_page'] !== 'aat_settings_group') {
+        return;
+    }
+    
+    // Check if email field was submitted
+    if (!isset($_POST['aat_user_email'])) {
+        return;
+    }
+    
+    $new_email = sanitize_email($_POST['aat_user_email']);
+    if (empty($new_email)) {
+        return;
+    }
+    
+    // Get current saved value
+    $old_email = get_option('aat_user_email', '');
+    
+    // Only update if different
+    if ($new_email !== $old_email) {
+        aat_update_email_on_server($old_email, $new_email);
+    }
+}
+
+/**
+ * Update email on server when changed in settings
+ *
+ * @since 1.1.1
+ * @param string $old_value Old email value
+ * @param string $new_value New email value
+ * @return void
+ */
+function aat_update_email_on_server($old_value, $new_value) {
+    // Only update if email actually changed and is not empty
+    if ($new_value === $old_value || empty($new_value)) {
+        return;
+    }
+    
+    $site_id = get_option('aat_site_id');
+    if (!$site_id) {
+        return;
+    }
+    
+    // Update email on server via dev-settings.php
+    // Use blocking request to ensure it completes (since user just clicked save)
+    $api_url = 'https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/dev-settings.php';
+    $response = wp_remote_post($api_url, [
+        'body' => [
+            'action' => 'update_email',
+            'site_id' => $site_id,
+            'email' => sanitize_email($new_value)
+        ],
+        'timeout' => 5,
+        'blocking' => true // Blocking to ensure it saves
+    ]);
+    
+    // Log response for debugging
+    if (defined('WP_DEBUG') && WP_DEBUG) {
+        if (is_wp_error($response)) {
+            error_log('AAT Email Update Error: ' . $response->get_error_message());
+        } else {
+            $response_code = wp_remote_retrieve_response_code($response);
+            $response_body = wp_remote_retrieve_body($response);
+            if ($response_code !== 200) {
+                error_log('AAT Email Update Failed: HTTP ' . $response_code . ' - ' . $response_body);
+            } else {
+                $body_data = json_decode($response_body, true);
+                if (isset($body_data['success']) && $body_data['success']) {
+                    error_log('AAT Email Update Success: ' . $body_data['email']);
+                } else {
+                    error_log('AAT Email Update API Error: ' . ($body_data['error'] ?? 'Unknown error'));
+                }
+            }
+        }
+    }
 }
 
 function aat_is_pro_user() {
@@ -734,7 +942,8 @@ function aat_is_pro_user() {
     
     // Then check centralized pro status from hs_aat_plugin_sites
     $central_pro_status = aat_get_central_pro_status();
-    if ($central_pro_status === 'pro') {
+    // Both 'basic' and 'pro' tiers are considered pro users
+    if ($central_pro_status === 'pro' || $central_pro_status === 'basic') {
         return true;
     }
     
@@ -742,10 +951,29 @@ function aat_is_pro_user() {
 }
 
 /**
- * Get centralized pro status from API
+ * Check if user has Pro tier (not Basic)
+ * Used for features that are Pro-only, not available to Basic tier
+ *
+ * @since 1.1.1
+ * @return bool True if user has Pro tier, false otherwise
+ */
+function aat_is_pro_tier(): bool {
+    // First check local WordPress option
+    $local_setting = get_option('aat_is_pro');
+    if ($local_setting === 'yes') {
+        return true;
+    }
+    
+    // Then check centralized pro status - must be exactly 'pro'
+    $central_pro_status = aat_get_central_pro_status();
+    return $central_pro_status === 'pro';
+}
+
+/**
+ * Get centralized tier status from API
  *
  * @since 0.1.0
- * @return string 'pro' or 'free'
+ * @return string 'free', 'basic', or 'pro'
  */
 function aat_get_central_pro_status(): string {
     $cache_key = 'aat_pro_status_' . get_option('aat_site_id');
@@ -755,8 +983,8 @@ function aat_get_central_pro_status(): string {
     $bypass_cache = isset($_GET['aat_refresh_cache']) || isset($_POST['aat_refresh_cache']);
     // phpcs:enable WordPress.Security.NonceVerification
     
-    // For developers: shorter cache time and easier bypass
-    $cache_time = aat_is_developer_environment() ? 5 : 30; // 5 seconds for dev, 30 for production
+    // Short cache time for better UX after upgrades (customers expect instant results after payment)
+    $cache_time = 5; // 5 seconds - fast enough for good UX, still reduces API calls
     
     $cached_pro_status = $bypass_cache ? false : get_transient($cache_key);
     
@@ -941,14 +1169,22 @@ function aat_get_current_billing_cycle($site_id) {
         return null;
     }
     
-    $signup_date = $body['site_info']['created_at'];
+    // For Pro users, use pro_subscription_start_date if available; otherwise use created_at
+    $pro_status = $body['site_info']['pro_status'] ?? 'free';
+    $is_pro = in_array($pro_status, ['pro', 'basic']);
     
-    if (!$signup_date) {
+    if ($is_pro && !empty($body['site_info']['pro_subscription_start_date'])) {
+        $billing_date = $body['site_info']['pro_subscription_start_date'];
+    } else {
+        $billing_date = $body['site_info']['created_at'];
+    }
+    
+    if (!$billing_date) {
         return null;
     }
     
-    $signup_timestamp = strtotime($signup_date);
-    $signup_day = intval(gmdate('d', $signup_timestamp));
+    $billing_timestamp = strtotime($billing_date);
+    $billing_day = intval(gmdate('d', $billing_timestamp));
     
     // Handle edge cases for months with fewer days
     // If signup was on 29th, 30th, or 31st, use the last day of shorter months
@@ -960,8 +1196,8 @@ function aat_get_current_billing_cycle($site_id) {
     // Get the last day of current month
     $last_day_of_month = gmdate('t', mktime(0, 0, 0, $current_month, 1, $current_year));
     
-    // Use signup day, but cap it at the last day of current month
-    $reset_day = min($signup_day, $last_day_of_month);
+    // Use billing day (subscription start for Pro, signup for Free), but cap it at the last day of current month
+    $reset_day = min($billing_day, $last_day_of_month);
     
     // Calculate current billing cycle start
     if ($current_day >= $reset_day) {
@@ -971,8 +1207,8 @@ function aat_get_current_billing_cycle($site_id) {
         // Calculate next month's reset day
         $next_month = ($current_month == 12) ? 1 : $current_month + 1;
         $next_year = ($current_month == 12) ? $current_year + 1 : $current_year;
-        $last_day_next_month = gmdate('t', mktime(0, 0, 0, $next_month, 1, $next_year));
-        $next_reset_day = min($signup_day, $last_day_next_month);
+            $last_day_next_month = gmdate('t', mktime(0, 0, 0, $next_month, 1, $next_year));
+            $next_reset_day = min($billing_day, $last_day_next_month);
         
         $cycle_end = gmdate('Y-m-d H:i:s', mktime(23, 59, 59, $next_month, $next_reset_day - 1, $next_year));
         $next_reset = gmdate('Y-m-d H:i:s', mktime(0, 0, 0, $next_month, $next_reset_day, $next_year));
@@ -980,8 +1216,8 @@ function aat_get_current_billing_cycle($site_id) {
         // We're still in the previous month's cycle
         $prev_month = ($current_month == 1) ? 12 : $current_month - 1;
         $prev_year = ($current_month == 1) ? $current_year - 1 : $current_year;
-        $last_day_prev_month = gmdate('t', mktime(0, 0, 0, $prev_month, 1, $prev_year));
-        $prev_reset_day = min($signup_day, $last_day_prev_month);
+            $last_day_prev_month = gmdate('t', mktime(0, 0, 0, $prev_month, 1, $prev_year));
+            $prev_reset_day = min($billing_day, $last_day_prev_month);
         
         $cycle_start = gmdate('Y-m-d H:i:s', mktime(0, 0, 0, $prev_month, $prev_reset_day, $prev_year));
         $cycle_end = gmdate('Y-m-d H:i:s', mktime(23, 59, 59, $current_month, $reset_day - 1, $current_year));
@@ -992,7 +1228,7 @@ function aat_get_current_billing_cycle($site_id) {
         'start' => $cycle_start,
         'end' => $cycle_end,
         'reset_day' => $reset_day,
-        'signup_date' => $signup_date,
+        'billing_date' => $billing_date,
         'next_reset' => $next_reset
     ];
     
@@ -1096,11 +1332,16 @@ function aat_get_user_limits() {
     static $cached_limits = null;
     
     if ($cached_limits === null) {
+        $config = aat_get_plugin_config();
+        $free_limit = $config['limits']['free_monthly'] ?? 5;
+        $basic_limit = $config['limits']['basic_monthly'] ?? 25;
+        $pro_limit = $config['limits']['pro_monthly'] ?? 50;
+        
         $site_id = get_option('aat_site_id');
         if (!$site_id) {
             // Fallback to free limits if no site ID
             $cached_limits = [
-                'current_limit' => 15,
+                'current_limit' => $free_limit,
                 'plan' => 'free',
                 'is_pro' => false
             ];
@@ -1115,21 +1356,31 @@ function aat_get_user_limits() {
         ]);
         
         if (!is_wp_error($response)) {
+            $response_code = wp_remote_retrieve_response_code($response);
             $body = json_decode(wp_remote_retrieve_body($response), true);
-            if (isset($body['success']) && $body['success'] && isset($body['limits'])) {
+            
+            if ($response_code === 200 && isset($body['success']) && $body['success'] && isset($body['limits'])) {
                 $cached_limits = $body['limits'];
             } else {
+                // API call succeeded but returned error - log it for debugging
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('AAT: get_limits API returned error. Response code: ' . $response_code . ', Body: ' . wp_json_encode($body));
+                }
                 // Fallback to free limits if API fails
                 $cached_limits = [
-                    'current_limit' => 15,
+                    'current_limit' => $free_limit,
                     'plan' => 'free',
                     'is_pro' => false
                 ];
             }
         } else {
+            // API call failed - log error for debugging
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('AAT: get_limits API call failed. Error: ' . $response->get_error_message());
+            }
             // Fallback to free limits if API fails
             $cached_limits = [
-                'current_limit' => 15,
+                'current_limit' => $free_limit,
                 'plan' => 'free',
                 'is_pro' => false
             ];
@@ -1141,16 +1392,17 @@ function aat_get_user_limits() {
 
 // Future: Get user's plan limits
 function aat_get_plan_limits() {
+    $config = aat_get_plugin_config();
     $plan = get_option('aat_plan', 'free');
     
     $limits = [
-        'free' => 15,
-        'basic' => 50,    // $10/month
-        'pro' => 100,      // $20/month  
-        'agency' => -1     // $30-49/month (unlimited)
+        'free' => $config['limits']['free_monthly'] ?? 5,
+        'basic' => 25,    // Deprecated
+        'pro' => $config['limits']['pro_monthly'] ?? 50,
+        'agency' => -1     // Future feature (unlimited)
     ];
     
-    return $limits[$plan] ?? 15;
+    return $limits[$plan] ?? ($config['limits']['free_monthly'] ?? 5);
 }
 
 // Future: Check if user can generate based on their plan
@@ -1229,6 +1481,14 @@ function aat_scan_and_tag(): void {
         return;
     }
     
+    // Bulk generation is Pro-only feature (not available to Basic tier)
+    if (!aat_is_pro_tier()) {
+        $config = aat_get_plugin_config();
+        $price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
+        wp_send_json_error(sprintf(__('Bulk generation is a Pro-only feature. Upgrade to Pro (%s/month) to use bulk actions.', 'hs-auto-image-alt-text-generator-for-seo'), $price_display));
+        return;
+    }
+    
     // Check rate limiting
     if (!aat_check_rate_limit('scan_and_tag')) {
         wp_send_json_error(__('Too many requests. Please wait a moment and try again.', 'hs-auto-image-alt-text-generator-for-seo'));
@@ -1255,7 +1515,7 @@ function aat_scan_and_tag(): void {
         } else {
             wp_send_json([
                 'success' => false,
-                'message' => __('Monthly generation limit reached. Upgrade to Pro for 100 generations per month.', 'hs-auto-image-alt-text-generator-for-seo'),
+                'message' => sprintf(__('Monthly generation limit reached. Upgrade to Pro for %d generations per month.', 'hs-auto-image-alt-text-generator-for-seo'), aat_get_plugin_config()['limits']['pro_monthly'] ?? 50),
                 'limit_reached' => true,
                 'next_reset' => $next_reset,
                 'remaining' => 0
@@ -1493,15 +1753,25 @@ function aat_render_stats_cards($data) {
 			$limits = aat_get_user_limits();
 			?>
 			<div class="aat-stat-number"><?php echo absint($remaining_generations) ?></div>
-			<div class="aat-stat-label"><?php echo $is_pro ? 'Pro' : 'Free' ?> Generations Left</div>
-			<div class="aat-stat-note"><?php echo absint($limits['current_limit']) ?> per month</div>
-			<?php if (!$is_pro): ?>
-			<div class="aat-upgrade-text" style="margin-top: 8px; padding: 6px 8px; background: rgba(34, 113, 177, 0.1); border-radius: 4px; border-left: 3px solid #2271b1; transition: all 0.2s ease; cursor: pointer;" onmouseover="this.style.background='rgba(34, 113, 177, 0.15)'" onmouseout="this.style.background='rgba(34, 113, 177, 0.1)'" onclick="window.open('https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?client_reference_id=<?php echo esc_attr(urlencode(get_option('aat_site_id'))) ?>', '_blank')">
-				<span style="color: #2271b1; text-decoration: none; font-size: 11px; font-weight: 500; display: block; line-height: 1.4;">
-					🚀 Upgrade to Pro ($10/month) for 100 Generations per Month
-				</span>
+			<div class="aat-stat-label">
+				<?php echo $is_pro ? 'Pro' : 'Free' ?> Generations Left
+				<button type="button" id="aat-refresh-status" class="button button-small" style="margin-left: 8px; padding: 0 6px; font-size: 11px; height: 20px; line-height: 18px; vertical-align: middle; display: inline-flex; align-items: center; justify-content: center;" title="Refresh status (useful after upgrading)">
+					<span class="dashicons dashicons-update" style="font-size: 16px; width: 16px; height: 16px; line-height: 1; vertical-align: middle;"></span>
+				</button>
 			</div>
-			<?php endif; ?>
+			<div class="aat-stat-note"><?php echo absint($limits['current_limit']) ?> per month</div>
+		<?php if (!$is_pro): ?>
+		<?php
+		$config = aat_get_plugin_config();
+		$pro_limit = $config['limits']['pro_monthly'] ?? 50;
+		$price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
+		?>
+		<div class="aat-upgrade-text" style="margin-top: 8px; padding: 6px 8px; background: rgba(34, 113, 177, 0.1); border-radius: 4px; border-left: 3px solid #2271b1; transition: all 0.2s ease; cursor: pointer;" onmouseover="this.style.background='rgba(34, 113, 177, 0.15)'" onmouseout="this.style.background='rgba(34, 113, 177, 0.1)'" onclick="window.open('<?php echo esc_js(aat_get_stripe_checkout_url()) ?>', '_blank')">
+			<span style="color: #2271b1; font-size: 11px; font-weight: 500; display: block; line-height: 1.4;">
+				🚀 <span style="text-decoration: underline;"><?php echo esc_html(sprintf(__('Upgrade to Pro (%s/month) for %d Generations per Month', 'hs-auto-image-alt-text-generator-for-seo'), $price_display, $pro_limit)); ?></span>
+			</span>
+		</div>
+		<?php endif; ?>
 		</div>
 		<?php 
 		// Developer cards removed - debug info available in admin dashboard
@@ -1514,7 +1784,7 @@ function aat_render_stats_cards($data) {
 function aat_render_bulk_actions() {
 	?>
 	<!-- Bulk Actions -->
-	<?php if (aat_is_pro_user()): ?>
+	<?php if (aat_is_pro_tier()): ?>
 		<div class="aat-bulk-section">
 			<h3>Bulk Actions</h3>
 			<div class="aat-bulk-controls">
@@ -1531,15 +1801,31 @@ function aat_render_bulk_actions() {
 		<div class="aat-bulk-section aat-bulk-disabled">
 			<h3>Bulk Actions</h3>
 			<div class="aat-bulk-controls">
-				<button class="button button-secondary" disabled>
-					<span class="dashicons dashicons-lock"></span>
+				<button class="button button-secondary" disabled style="display: inline-flex; align-items: center; gap: 5px;">
+					<span class="dashicons dashicons-lock" style="vertical-align: middle;"></span>
 					Bulk Generate Missing Alt Tags
 				</button>
 					<span class="aat-bulk-info">
-						<a href="<?php echo esc_url('https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?client_reference_id=' . urlencode(get_option('aat_site_id'))) ?>" target="_blank">Upgrade to Pro ($10/month)</a> to use bulk actions
+						<?php
+						$config = aat_get_plugin_config();
+						$price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
+						$tier = aat_get_central_pro_status();
+						if ($tier === 'basic'):
+							// Basic users see message about upgrading to Pro for bulk features
+							$message = sprintf(__('Bulk generation is a Pro-only feature. Upgrade to Pro (%s/month) to use bulk actions.', 'hs-auto-image-alt-text-generator-for-seo'), esc_html($price_display));
+							?>
+							<span class="aat-underline" style="text-decoration: underline !important; border-bottom: 1px solid currentColor !important; display: inline;"><?php echo esc_html($message); ?></span>
+							<?php
+						else:
+							// Free users see standard upgrade message
+							?>
+							<a href="<?php echo esc_url(aat_get_stripe_checkout_url()) ?>" target="_blank" style="text-decoration: underline;"><?php echo esc_html(sprintf(__('Upgrade to Pro (%s/month)', 'hs-auto-image-alt-text-generator-for-seo'), $price_display)); ?></a> to use bulk actions
+							<?php
+						endif;
+						?>
 					</span>
 			</div>
-			<p class="aat-bulk-note"><strong>Note:</strong> This will use AI to generate alt tags for images without them.</p>
+			<p class="aat-bulk-note"><strong>Note:</strong> This will use available AI generations to create missing alt tags for your images.</p>
 		</div>
 	<?php endif; ?>
 	<?php
@@ -1888,11 +2174,38 @@ if (!$thumb_url) {
 							<?php settings_fields('aat_settings_group'); ?>
 							<div class="aat-settings-row">
 								<div class="aat-setting-group">
-									<label for="aat_user_email">Your Email (for updates):</label>
+									<label for="aat_user_email">Your Email:</label>
+									<?php 
+									// Get email from database via API
+									$site_id = get_option('aat_site_id');
+									$db_email = '';
+									$admin_email = get_option('admin_email');
+									
+									if ($site_id) {
+										$api_url = 'https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/dev-settings.php';
+										$response = wp_remote_get($api_url . '?action=get&site_id=' . urlencode($site_id), [
+											'timeout' => 5,
+											'sslverify' => true
+										]);
+										
+										if (!is_wp_error($response)) {
+											$body = json_decode(wp_remote_retrieve_body($response), true);
+											if (isset($body['success']) && $body['success'] && isset($body['site_info']['email'])) {
+												$db_email = $body['site_info']['email'];
+											}
+										}
+									}
+									
+									// Use database email if available, otherwise WordPress admin email
+									$display_email = !empty($db_email) ? $db_email : $admin_email;
+									?>
 									<input type="email" id="aat_user_email" name="aat_user_email" 
-										value="<?php echo esc_attr(get_option('aat_user_email')) ?>" 
+										value="<?php echo esc_attr($display_email) ?>" 
 										class="aat-setting-input" />
-									<small class="aat-setting-help">We'll send you important updates about the plugin.</small>
+									<small class="aat-setting-help">
+										Email address stored in database for plugin updates and support. 
+										Defaults to WordPress admin email (<?php echo esc_html($admin_email) ?>) if not set.
+									</small>
 								</div>
 								<div class="aat-setting-group">
 									<label for="aat_site_id">Site ID:</label>
@@ -1901,14 +2214,17 @@ if (!$thumb_url) {
 										class="aat-setting-input" readonly />
 									<small class="aat-setting-help">Unique identifier for your site (read-only).</small>
 								</div>
-								<?php 
-								// Developer settings are now managed via the Developer Dashboard
-								$is_developer = aat_is_developer_environment();
-								if ($is_developer): ?>
-								<div class="aat-setting-group aat-developer-only">
-									<p><strong>Developer Settings</strong></p>
-									<p>Pro Mode and Debug Mode are managed separately via the admin dashboard.</p>
-									<small class="aat-setting-help">Current Pro Mode: <strong><?php echo aat_is_pro_user() ? 'Enabled' : 'Disabled' ?></strong> | Debug Mode: <strong><?php echo aat_is_debug_mode() ? 'Enabled' : 'Disabled' ?></strong></small>
+								<?php if (aat_is_pro_user()): ?>
+								<div class="aat-setting-group">
+									<label>Subscription Management:</label>
+									<a href="<?php echo esc_url(aat_get_stripe_portal_url()) ?>" 
+									   target="_blank" 
+									   class="button button-secondary" 
+									   style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none;">
+										<span class="dashicons dashicons-admin-generic" style="font-size: 16px;"></span>
+										Manage Subscription
+									</a>
+									<small class="aat-setting-help">Update payment method, view invoices, or cancel your subscription.</small>
 								</div>
 								<?php endif; ?>
 							</div>
@@ -1928,7 +2244,10 @@ if (!$thumb_url) {
 								<strong>WordPress Version:</strong> <?php echo esc_html(get_bloginfo('version')) ?>
 							</div>
 							<div class="aat-info-item">
-								<strong>Pro Status:</strong> <?php echo aat_is_pro_user() ? 'Active' : 'Free Version' ?>
+								<strong>Tier:</strong> <?php 
+								$tier = aat_get_central_pro_status();
+								echo esc_html(ucfirst($tier)); // Shows: Free, Basic, or Pro
+								?>
 							</div>
 							<div class="aat-info-item">
 								<strong>Site URL:</strong> <?php echo esc_url(home_url()) ?>
@@ -1957,6 +2276,19 @@ if (!$thumb_url) {
 		</div>
 	</div>
 
+	<style>
+		@keyframes spin {
+			from { transform: rotate(0deg); }
+			to { transform: rotate(360deg); }
+		}
+		.aat-bulk-info .aat-underline,
+		.aat-bulk-info u,
+		span.aat-underline {
+			text-decoration: underline !important;
+			border-bottom: 1px solid currentColor !important;
+			display: inline-block;
+		}
+	</style>
 	
 	<script>
 		// Upgrade popup functionality
@@ -1981,26 +2313,33 @@ if (!$thumb_url) {
 				}
 			}
 			
-			const popup = document.createElement('div');
-			popup.className = 'aat-upgrade-popup';
-			popup.innerHTML = `
-				<div class="aat-upgrade-popup-content">
-					<h2>🚀 Generation Limit Reached</h2>
-					<p>You've used all 15 of your free alt tag generations for this month!</p>
-					<div class="aat-countdown">
-						⏰ Free generations reset in: <strong>${countdownText}</strong>
-					</div>
-					<p>Want 100 generations per month? Upgrade to Pro for just <strong>$10/month</strong>!</p>
-					<div class="aat-upgrade-buttons">
-						<a href="#" class="aat-upgrade-btn primary" onclick="window.open('https://buy.stripe.com/cNidR97Rj7gncfb7isejK00?client_reference_id=<?php echo esc_js(get_option('aat_site_id')) ?>', '_blank')">
-							🔥 Upgrade to Pro
-						</a>
-						<button class="aat-upgrade-btn secondary" onclick="closeUpgradePopup()">
-							Maybe Later
-						</button>
-					</div>
+		<?php
+		$config = aat_get_plugin_config();
+		$free_limit = $config['limits']['free_monthly'] ?? 5;
+		$pro_limit = $config['limits']['pro_monthly'] ?? 50;
+		$price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
+		$checkout_url = aat_get_stripe_checkout_url();
+		?>
+		const popup = document.createElement('div');
+		popup.className = 'aat-upgrade-popup';
+		popup.innerHTML = `
+			<div class="aat-upgrade-popup-content">
+				<h2>🚀 Generation Limit Reached</h2>
+				<p>You've used all <?php echo absint($free_limit); ?> of your free alt tag generations for this month!</p>
+				<div class="aat-countdown">
+					⏰ Free generations reset in: <strong>${countdownText}</strong>
 				</div>
-			`;
+				<p>Want <?php echo absint($pro_limit); ?> generations per month? Upgrade to Pro for just <strong><?php echo esc_html($price_display); ?>/month</strong>!</p>
+				<div class="aat-upgrade-buttons">
+					<a href="#" class="aat-upgrade-btn primary" onclick="window.open('<?php echo esc_js($checkout_url); ?>', '_blank')">
+						🔥 Upgrade to Pro
+					</a>
+					<button class="aat-upgrade-btn secondary" onclick="closeUpgradePopup()">
+						Maybe Later
+					</button>
+				</div>
+			</div>
+		`;
 			
 			document.body.appendChild(popup);
 		}
@@ -2163,6 +2502,25 @@ if (!$thumb_url) {
 					});
 			});
 		});
+		
+		// Refresh status button
+		const refreshStatusBtn = document.getElementById('aat-refresh-status');
+		if (refreshStatusBtn) {
+			refreshStatusBtn.addEventListener('click', function() {
+				const icon = this.querySelector('.dashicons');
+				const originalText = this.title;
+				
+				// Show loading state
+				icon.style.animation = 'spin 1s linear infinite';
+				this.title = 'Refreshing...';
+				this.disabled = true;
+				
+				// Reload page with cache bypass parameter
+				const url = new URL(window.location.href);
+				url.searchParams.set('aat_refresh_cache', '1');
+				window.location.href = url.toString();
+			});
+		}
 
 		// Modal functionality
 		function aat_openImageModal(id, imageUrl, altText, filename) {
@@ -2306,7 +2664,7 @@ function aat_generate_single(): void {
         } else {
             wp_send_json([
                 'success' => false,
-                'message' => __('Monthly generation limit reached. Upgrade to Pro for 100 generations per month.', 'hs-auto-image-alt-text-generator-for-seo'),
+                'message' => sprintf(__('Monthly generation limit reached. Upgrade to Pro for %d generations per month.', 'hs-auto-image-alt-text-generator-for-seo'), aat_get_plugin_config()['limits']['pro_monthly'] ?? 50),
                 'limit_reached' => true,
                 'next_reset' => $next_reset,
                 'remaining' => 0
