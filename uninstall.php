@@ -19,7 +19,7 @@ if ($site_id) {
     // Get plugin version from main file
     $plugin_file = __DIR__ . '/hs-auto-image-alt-text-generator-for-seo.php';
     $plugin_data = get_file_data($plugin_file, ['Version' => 'Version']);
-    $plugin_version = $plugin_data['Version'] ?? '1.1.2';
+    $plugin_version = $plugin_data['Version'] ?? '1.2.0';
     
     // Send uninstall event (track-event.php also updates plugin_sites table)
     wp_remote_post('https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/track-event.php', [

@@ -4,7 +4,7 @@ Tags: alt text, image seo, accessibility, ai, wcag
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.1.2
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -46,27 +46,33 @@ It produces natural, keyword-aware alt text that improves ranking and readabilit
 4. Click **Bulk Generate** or generate individual images
 5. Sit back — your images are now SEO-optimized automatically!
 
+**Note:** Free users can use bulk generation - it will use your monthly quota. Upgrade to Pro for 50 generations/month, or purchase Generation Packs ($5 for 20) as needed.
+
 = 💎 Free vs Pro =
 
 **Free Plan:**
 * 10 AI generations per month
 * Perfect for small blogs and personal sites
+* Bulk generation available (uses monthly quota)
 
 **Pro Plan ($10/month):**
 * 50 AI generations per month
 * Ideal for growing businesses and content-heavy sites
-* Payment processing: Handled securely via Stripe.com
-* Subscriptions: Managed via Stripe's secure payment platform
+* Secure payment processing via Stripe (see External Services section for details)
+
+**Generation Packs ($5 for 20 generations):**
+* One-time purchase - no subscription required
+* Add 20 generations to your account
+* Works alongside your monthly quota
+* Generations never expire - use them whenever you need
+* Perfect for occasional extra needs without committing to monthly subscription
+* Payment processing via Stripe (see External Services section for details)
 
 **Important:** This plugin connects to external APIs to provide AI-powered features. See "External Services" section below for details.
 
 = 🔐 Privacy & Security =
 
-* Images are processed securely via encrypted API
-* No images are stored on external servers
-* Alt text is saved directly to your WordPress database
-* Fully compliant with WordPress coding standards
-* Transparent disclosure of all external service usage
+All data is transmitted securely via HTTPS. Images are analyzed but not stored externally. Alt text is saved directly to your WordPress database. See the External Services section below for complete details on data handling and privacy.
 
 = 🌐 External Services (IMPORTANT - Please Read) =
 
@@ -76,7 +82,7 @@ An informational notice will be displayed on first activation explaining what da
 
 **Hatrix Solutions API (hatrixsolutions.com)**
 * **Purpose:** Site registration, usage tracking, subscription management, and AI generation coordination
-* **Data sent:** Site URL, WordPress version, plugin version, admin email (optional), usage statistics
+* **Data sent:** Site URL, WordPress version, plugin version, admin email, usage statistics
 * **When:** On plugin activation, weekly status updates, and during alt text generation
 * **Privacy Policy:** https://hatrixsolutions.com/privacy
 * **Terms of Service:** https://hatrixsolutions.com/terms
@@ -90,11 +96,11 @@ An informational notice will be displayed on first activation explaining what da
 * **Why necessary:** Powers the AI alt text generation feature
 
 **Stripe Payment Processing (stripe.com)**
-* **Purpose:** Secure payment processing for Pro plan subscriptions
+* **Purpose:** Secure payment processing for Pro plan subscriptions and Generation Pack purchases
 * **Data sent:** Billing information, email, payment details (handled directly by Stripe)
-* **When:** Only if you choose to upgrade to Pro plan
+* **When:** Only if you choose to upgrade to Pro plan or purchase Generation Packs
 * **Privacy Policy:** https://stripe.com/privacy
-* **Why necessary:** Enables secure subscription payments for Pro features
+* **Why necessary:** Enables secure subscription payments for Pro features and one-time purchases for Generation Packs
 
 **By using this plugin, you agree to:**
 1. Send the above data to these external services
@@ -151,7 +157,7 @@ Absolutely! Click the **Edit** button next to any image to modify the alt text i
 
 = What happens if I run out of generations? =
 
-You can upgrade to Pro anytime for more monthly generations. Or wait until your limit resets next month.
+You can upgrade to Pro anytime for more monthly generations ($10/month for 50 generations), purchase a Generation Pack ($5 for 20 generations), or wait until your limit resets next month.
 
 = Does this work with WooCommerce, ACF, or other plugins? =
 
@@ -159,11 +165,11 @@ Yes! This plugin works with standard WordPress images. Once alt text is generate
 
 = Is my data secure? =
 
-Yes. Images are processed via secure HTTPS API. No images are stored externally. Alt text is saved directly to your WordPress database.
+Yes. All data is transmitted over secure HTTPS connections. See the External Services section for complete security details.
 
 = Can I bulk generate for all images at once? =
 
-Pro users can use the bulk generation feature. Free users can generate images individually or upgrade to Pro.
+Yes! Bulk generation is available to all users. Free users can use bulk generation within their monthly quota. Pro users get 50 generations per month. Generation Packs can also be used for bulk operations.
 
 = What image formats are supported? =
 
@@ -175,46 +181,57 @@ No! The plugin works out of the box. Your site automatically connects to our sec
 
 = What data do you collect? =
 
-We collect: site URL, WordPress version, plugin version, admin email (optional), image URLs (for generation), and usage statistics. This data is necessary to provide the AI generation service, track your monthly limit, and provide support. Full details are disclosed in the readme and in an informational notice.
+See the External Services section above for complete details on what data is collected, when it's collected, and why it's necessary.
 
 = Can I use this plugin offline? =
 
-No. This plugin requires connection to external APIs (Hatrix Solutions and OpenAI) to provide AI-powered alt text generation. It cannot function without internet connectivity and API access.
+No. This plugin requires external API connectivity to function. See the External Services section for details.
 
 = How is my privacy protected? =
 
-All data is transmitted over secure HTTPS connections. Images are analyzed but not permanently stored on our servers. You can review our Privacy Policy at https://hatrixsolutions.com/privacy
+All data is transmitted over secure HTTPS connections. Images are analyzed but not permanently stored on external servers. See the External Services section for complete privacy details and links to our Privacy Policy.
 
 == Screenshots ==
 
 1. **Alt Text Viewer Dashboard** - View all images with their alt text status in grid or table view
 2. **Stats Overview** - See total images, missing alt tags, and generation limits at a glance
-3. **Bulk Generation** - Process multiple images with one click (Pro feature)
+3. **Bulk Generation** - Process multiple images with one click (available to all users)
 4. **Individual Image Controls** - Generate, edit, or clear alt text for any image
 5. **Filter & Search** - Quickly find images missing alt text
 6. **Settings Panel** - Simple configuration and account management
 
 == Changelog ==
 
-= 1.1.1 - 2025-01-24 =
-* **IMPORTANT:** Added informational notice about external service usage (WordPress.org compliance)
+= 1.2.0 - 2025-11-04 =
+* **MAJOR:** Removed Basic tier - replaced with Generation Packs ($5 for 20 generations)
+* **MAJOR:** Bulk generation now available to all users (not just Pro)
+* **FEATURE:** Added Generation Packs - one-time purchase of 20 generations for $5
+* **FEATURE:** Paid generations track separately from monthly quota and never expire
+* **FEATURE:** Generation logic uses monthly quota first, then paid generations
+* **FEATURE:** Separate dashboard cards for Free/Pro monthly generations and Paid generations
+* **ENHANCED:** Plugin dashboard now shows paid generations available with refresh button
+* **ENHANCED:** Stripe webhook improved metadata parsing for generation pack purchases
+* **ENHANCED:** Bulk generation confirmation popup with generation usage reminder
+* **IMPROVED:** Better handling of quota exhaustion with paid generation fallback
+* **IMPROVED:** Price storage now numeric-only (no $ signs in database)
+* **IMPROVED:** Lightning bolt SVG icon for bulk generation button
+* **FIXED:** Generation counting now properly excludes paid generations from monthly count
+* **FIXED:** Generation pack purchases now correctly add to database via webhook
+* **FIXED:** Checkout success page correctly displays pack purchase details
+* **FIXED:** WordPress coding standards compliance (i18n translator comments, ordered placeholders)
+* **FIXED:** Security improvements (nonce verification, input sanitization)
+* **FIXED:** Slow query warnings properly suppressed with phpcs:ignore comments
+* **CLEANUP:** Removed verbose error logging from production code
+
+= 1.1.1 - 2025-10-24 =
 * Added: Dismissible notice explaining data collection on first activation
 * Added: Link to full external services disclosure in readme
 * Enhanced: Readme with comprehensive external service disclosures
-* Enhanced: Privacy and security information section
-* Enhanced: FAQ section with data collection and privacy questions
 * Improved: Clear explanation of what data is collected and why
-* Improved: Links to Privacy Policy and Terms of Service
-* Fixed: Site registration now checks URL first to prevent duplicate records
-* Fixed: ID gap issue in database when site_id changes locally
 
-= 1.1.0 - 2025-01-19 =
-* Enhanced: Plugin lifecycle tracking (activation, deactivation, reactivation, uninstall)
+= 1.1.0 - 2025-10-19 =
 * Enhanced: Automatic site registration with central server
 * Enhanced: Site ID preservation across reinstalls
-* Enhanced: Developer analytics dashboard with comprehensive metrics
-* Enhanced: Pro upgrade tracking via Stripe integration
-* Enhanced: Event history tracking with version information
 * Improved: Button styling and icon alignment
 * Improved: Custom SVG icons for better cross-site compatibility
 * Improved: UTC timezone consistency across all tracking
@@ -223,30 +240,17 @@ All data is transmitted over secure HTTPS connections. Images are analyzed but n
 * Added: Rate limiting for AJAX endpoints (60 requests/minute)
 * Added: Weekly heartbeat for site status updates
 * Added: Welcome notice after activation with quick start guide
-* Added: Feedback request after 5 generations
-* Added: Low credits warning for free users (triggers at ≤3 remaining)
 * Added: Dismissible admin notices with persistent tracking
-* Added: Monthly reset for low credits notice (reminds each month)
 
-= 1.0.0 - 2024-12-01 =
-* Initial public release
+= 1.0.0 - 2025-10-01 =
 * Bulk alt text generation
 * Individual image generation
 * Alt text viewer with grid and table views
 * Search and filter functionality
-* Free plan: 10 generations/month
-* Pro plan: 50 generations/month
 * WordPress 6.8 compatibility
 * WCAG accessibility compliance
 * Full WordPress coding standards compliance
 
-== Upgrade Notice ==
-
-= 1.1.1 =
-**IMPORTANT:** This version adds comprehensive external service disclosure for WordPress.org compliance. You'll see an informational notice explaining what data is sent to external APIs. This is a non-blocking notice that can be dismissed. Also fixes database ID gap issue.
-
-= 1.1.0 =
-Major update with enhanced tracking, developer analytics, and improved cross-site compatibility. Upgrade recommended for better performance and reliability.
 
 == Additional Information ==
 

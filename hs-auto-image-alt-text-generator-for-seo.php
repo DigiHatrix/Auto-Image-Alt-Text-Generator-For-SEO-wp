@@ -10,8 +10,8 @@
  * @wordpress-plugin
  * Plugin Name: Auto Image Alt Text Generator For SEO
  * Plugin URI:  https://hatrixsolutions.com/auto-alt-text-generator-for-seo
- * Description: Automatically generate and apply alt tags to images using AI.
- * Version:     1.1.2
+ * Description: Automatically generate and apply alt text to images using AI.
+ * Version:     1.2.0
  * Author:      Hatrix Solutions
  * Text Domain: hs-auto-image-alt-text-generator-for-seo
  * Domain Path: /languages
@@ -28,7 +28,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AAT_VERSION', '1.1.2');
+define('AAT_VERSION', '1.2.0');
 define('AAT_PLUGIN_FILE', __FILE__);
 define('AAT_PLUGIN_BASENAME', plugin_basename(__FILE__));
 define('AAT_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -71,10 +71,20 @@ register_deactivation_hook(__FILE__, 'aat_track_deactivation');
  * @return array Configuration array with limits, pricing, URLs, etc.
  */
 function aat_get_plugin_config() {
-    // Check cache first (1 hour TTL)
-    $cached_config = get_transient('aat_plugin_config');
-    if ($cached_config !== false) {
-        return $cached_config;
+    // Allow bypassing cache for testing (add ?aat_refresh_cache=1 to any admin page)
+    // phpcs:disable WordPress.Security.NonceVerification -- Cache refresh is non-destructive read-only operation
+    $bypass_cache = isset($_GET['aat_refresh_cache']) || isset($_POST['aat_refresh_cache']);
+    // phpcs:enable WordPress.Security.NonceVerification
+    
+    // For testing: Set to true to disable caching completely (instant updates)
+    $disable_cache = defined('AAT_DISABLE_CONFIG_CACHE') && AAT_DISABLE_CONFIG_CACHE;
+    
+    // Check cache first (1 hour TTL) unless bypassing or cache disabled
+    if (!$bypass_cache && !$disable_cache) {
+        $cached_config = get_transient('aat_plugin_config');
+        if ($cached_config !== false) {
+            return $cached_config;
+        }
     }
     
     // Fetch from API
@@ -84,18 +94,16 @@ function aat_get_plugin_config() {
         'sslverify' => true,
     ]);
     
-    // Minimal fallback if API completely fails - signals error state
+    // Minimal fallback if API completely fails - use sensible defaults so plugin still works
     $error_fallback = [
         'limits' => [
-            'free_monthly' => 0,
-            'basic_monthly' => 0,
-            'pro_monthly' => 0
+            'free_monthly' => 10,
+            'pro_monthly' => 50
         ],
         'pricing' => [
-            'basic_monthly_price' => 0,
-            'basic_monthly_price_display' => 'N/A',
-            'pro_monthly_price' => 0,
-            'pro_monthly_price_display' => 'N/A',
+            'pro_monthly_price' => 10.00,
+            'generation_pack_price' => 5.00,
+            'generation_pack_size' => 20,
             'currency' => 'USD'
         ],
         'stripe' => [
@@ -111,8 +119,10 @@ function aat_get_plugin_config() {
     ];
     
     if (is_wp_error($response)) {
-        // Cache error state for 1 minute only (retry sooner)
-        set_transient('aat_plugin_config', $error_fallback, 60);
+        // Cache error state for 1 minute only (retry sooner), unless cache disabled
+        if (!$disable_cache) {
+            set_transient('aat_plugin_config', $error_fallback, 60);
+        }
         return $error_fallback;
     }
     
@@ -120,16 +130,20 @@ function aat_get_plugin_config() {
     $data = json_decode($body, true);
     
     if (!$data || !isset($data['success']) || !$data['success'] || !isset($data['config'])) {
-        // Cache error state for 1 minute only (retry sooner)
-        set_transient('aat_plugin_config', $error_fallback, 60);
+        // Cache error state for 1 minute only (retry sooner), unless cache disabled
+        if (!$disable_cache) {
+            set_transient('aat_plugin_config', $error_fallback, 60);
+        }
         return $error_fallback;
     }
     
     $config = $data['config'];
     
-    // Cache for 1 hour (or use TTL from API)
-    $cache_ttl = isset($config['cache_ttl']) ? intval($config['cache_ttl']) : 3600;
-    set_transient('aat_plugin_config', $config, $cache_ttl);
+    // Cache for 1 hour (or use TTL from API), unless cache disabled
+    if (!$disable_cache) {
+        $cache_ttl = isset($config['cache_ttl']) ? intval($config['cache_ttl']) : 3600;
+        set_transient('aat_plugin_config', $config, $cache_ttl);
+    }
     
     return $config;
 }
@@ -150,6 +164,28 @@ function aat_get_stripe_checkout_url() {
     
     $site_id = get_option('aat_site_id');
     return $base_url . '?client_reference_id=' . urlencode($site_id);
+}
+
+/**
+ * Get Stripe checkout URL for generation packs with site_id
+ * 
+ * @since 1.2.0
+ * @return string Stripe checkout URL for generation packs
+ */
+function aat_get_generation_pack_checkout_url() {
+    $config = aat_get_plugin_config();
+    $base_url = $config['stripe']['checkout_url_generation_pack'] ?? '';
+    
+    if (empty($base_url)) {
+        return '#'; // Return # if no URL configured (prevents broken links)
+    }
+    
+    $site_id = get_option('aat_site_id');
+    
+    // Append client_reference_id as URL parameter for Stripe Payment Links
+    // Stripe Payment Links support client_reference_id as a query parameter
+    $separator = strpos($base_url, '?') !== false ? '&' : '?';
+    return $base_url . $separator . 'client_reference_id=' . urlencode($site_id);
 }
 
 /**
@@ -603,6 +639,7 @@ function aat_show_low_credits_notice() {
                 <?php 
                 $config = aat_get_plugin_config();
                 $pro_limit = $config['limits']['pro_monthly'] ?? 50;
+                /* translators: %d: Number of generations per month */
                 echo esc_html(sprintf(__('Upgrade to Pro to get %d generations per month and unlock bulk generation features.', 'hs-auto-image-alt-text-generator-for-seo'), $pro_limit)); 
                 ?>
             </p>
@@ -636,16 +673,21 @@ function aat_show_low_credits_notice() {
                 <?php 
                 $config = aat_get_plugin_config();
                 $pro_limit = $config['limits']['pro_monthly'] ?? 50;
+                /* translators: %d: Number of generations per month */
                 echo esc_html(sprintf(__('Upgrade to Pro for %d generations per month, bulk processing, and priority support.', 'hs-auto-image-alt-text-generator-for-seo'), $pro_limit)); 
                 ?>
             </p>
             <p>
                 <?php
                 $config = aat_get_plugin_config();
-                $price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
+                $pro_price = floatval($config['pricing']['pro_monthly_price'] ?? 10.00);
+                $price_display = '$' . number_format($pro_price, 0);
                 ?>
                 <a href="<?php echo esc_url($upgrade_url); ?>" class="button button-primary" target="_blank">
-                    <?php echo esc_html(sprintf(__('Upgrade to Pro - Only %s/month', 'hs-auto-image-alt-text-generator-for-seo'), $price_display)); ?>
+                    <?php 
+                    /* translators: %s: Price (e.g., $10) */
+                    echo esc_html(sprintf(__('Upgrade to Pro - Only %s/month', 'hs-auto-image-alt-text-generator-for-seo'), $price_display)); 
+                    ?>
                 </a>
                 <a href="<?php echo esc_url($dismiss_url); ?>" class="button button-secondary">
                     <?php echo esc_html__('Dismiss', 'hs-auto-image-alt-text-generator-for-seo'); ?>
@@ -856,6 +898,11 @@ function aat_maybe_update_email_on_save() {
         return;
     }
     
+    // Verify nonce for security (Settings API nonce verification)
+    if (!check_admin_referer('aat_settings_group-options')) {
+        return;
+    }
+    
     // Check if settings form was submitted
     if (!isset($_POST['option_page']) || $_POST['option_page'] !== 'aat_settings_group') {
         return;
@@ -866,7 +913,8 @@ function aat_maybe_update_email_on_save() {
         return;
     }
     
-    $new_email = sanitize_email($_POST['aat_user_email']);
+    // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized below
+    $new_email = sanitize_email(wp_unslash($_POST['aat_user_email']));
     if (empty($new_email)) {
         return;
     }
@@ -912,25 +960,7 @@ function aat_update_email_on_server($old_value, $new_value) {
         'blocking' => true // Blocking to ensure it saves
     ]);
     
-    // Log response for debugging
-    if (defined('WP_DEBUG') && WP_DEBUG) {
-        if (is_wp_error($response)) {
-            error_log('AAT Email Update Error: ' . $response->get_error_message());
-        } else {
-            $response_code = wp_remote_retrieve_response_code($response);
-            $response_body = wp_remote_retrieve_body($response);
-            if ($response_code !== 200) {
-                error_log('AAT Email Update Failed: HTTP ' . $response_code . ' - ' . $response_body);
-            } else {
-                $body_data = json_decode($response_body, true);
-                if (isset($body_data['success']) && $body_data['success']) {
-                    error_log('AAT Email Update Success: ' . $body_data['email']);
-                } else {
-                    error_log('AAT Email Update API Error: ' . ($body_data['error'] ?? 'Unknown error'));
-                }
-            }
-        }
-    }
+    // Email update response is handled silently - errors are non-critical
 }
 
 function aat_is_pro_user() {
@@ -942,8 +972,8 @@ function aat_is_pro_user() {
     
     // Then check centralized pro status from hs_aat_plugin_sites
     $central_pro_status = aat_get_central_pro_status();
-    // Both 'basic' and 'pro' tiers are considered pro users
-    if ($central_pro_status === 'pro' || $central_pro_status === 'basic') {
+    // Only 'pro' tier is considered pro user (removed Basic - now using generation packs)
+    if ($central_pro_status === 'pro') {
         return true;
     }
     
@@ -951,8 +981,8 @@ function aat_is_pro_user() {
 }
 
 /**
- * Check if user has Pro tier (not Basic)
- * Used for features that are Pro-only, not available to Basic tier
+ * Check if user has Pro tier
+ * Used for features that are Pro-only
  *
  * @since 1.1.1
  * @return bool True if user has Pro tier, false otherwise
@@ -973,7 +1003,7 @@ function aat_is_pro_tier(): bool {
  * Get centralized tier status from API
  *
  * @since 0.1.0
- * @return string 'free', 'basic', or 'pro'
+ * @return string 'free' or 'pro' (removed 'basic' - now using generation packs)
  */
 function aat_get_central_pro_status(): string {
     $cache_key = 'aat_pro_status_' . get_option('aat_site_id');
@@ -1171,7 +1201,7 @@ function aat_get_current_billing_cycle($site_id) {
     
     // For Pro users, use pro_subscription_start_date if available; otherwise use created_at
     $pro_status = $body['site_info']['pro_status'] ?? 'free';
-    $is_pro = in_array($pro_status, ['pro', 'basic']);
+    $is_pro = ($pro_status === 'pro');
     
     if ($is_pro && !empty($body['site_info']['pro_subscription_start_date'])) {
         $billing_date = $body['site_info']['pro_subscription_start_date'];
@@ -1269,11 +1299,62 @@ function aat_get_monthly_usage() {
     }
     
     $usage_count = isset($body['usage_count']) ? intval($body['usage_count']) : 0;
+    $paid_generations = isset($body['paid_generations']) ? intval($body['paid_generations']) : 0;
     
-    // Cache for 5 minutes
+    // Cache both values
     set_transient($cache_key, $usage_count, 5 * MINUTE_IN_SECONDS);
+    set_transient($cache_key . '_paid', $paid_generations, 5 * MINUTE_IN_SECONDS);
     
     return $usage_count;
+}
+
+/**
+ * Get paid generations available for the site
+ *
+ * @since 1.2.0
+ * @return int Number of paid generations available
+ */
+function aat_get_paid_generations() {
+    $site_id = get_option('aat_site_id');
+    if (!$site_id) {
+        return 0;
+    }
+    
+    // Allow bypassing cache for testing (add ?aat_refresh_cache=1 to any admin page)
+    // phpcs:disable WordPress.Security.NonceVerification -- Cache refresh is non-destructive read-only operation
+    $bypass_cache = isset($_GET['aat_refresh_cache']) || isset($_POST['aat_refresh_cache']);
+    // phpcs:enable WordPress.Security.NonceVerification
+    
+    // Check cache first (unless bypassing)
+    $cache_key = 'aat_monthly_usage_' . $site_id . '_paid';
+    $cached_paid = $bypass_cache ? false : get_transient($cache_key);
+    
+    if ($cached_paid !== false) {
+        return intval($cached_paid);
+    }
+    
+    // Make API call to get usage (includes paid_generations)
+    $api_url = 'https://hatrixsolutions.com/api/hs-auto-alt-text-generator-for-seo/get-usage.php';
+    $response = wp_remote_get($api_url . '?site_id=' . urlencode($site_id), [
+        'timeout' => 5,
+        'sslverify' => true
+    ]);
+    
+    if (is_wp_error($response)) {
+        return 0;
+    }
+    
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+    if (!isset($body['success']) || !$body['success']) {
+        return 0;
+    }
+    
+    $paid_generations = isset($body['paid_generations']) ? intval($body['paid_generations']) : 0;
+    
+    // Cache for 5 minutes
+    set_transient($cache_key, $paid_generations, 5 * MINUTE_IN_SECONDS);
+    
+    return $paid_generations;
 }
 
 function aat_get_next_reset_date($site_id = null) {
@@ -1311,7 +1392,14 @@ function aat_can_generate_free() {
     $monthly_usage = aat_get_monthly_usage();
     $limits = aat_get_user_limits();
     
-    return $monthly_usage < $limits['current_limit'];
+    // Check monthly quota first
+    if ($monthly_usage < $limits['current_limit']) {
+        return true; // Has monthly quota available
+    }
+    
+    // If monthly quota exhausted, check paid generations
+    $paid_generations = aat_get_paid_generations();
+    return $paid_generations > 0;
 }
 
 function aat_get_remaining_free_generations() {
@@ -1333,8 +1421,7 @@ function aat_get_user_limits() {
     
     if ($cached_limits === null) {
         $config = aat_get_plugin_config();
-        $free_limit = $config['limits']['free_monthly'] ?? 5;
-        $basic_limit = $config['limits']['basic_monthly'] ?? 25;
+        $free_limit = $config['limits']['free_monthly'] ?? 10;
         $pro_limit = $config['limits']['pro_monthly'] ?? 50;
         
         $site_id = get_option('aat_site_id');
@@ -1362,11 +1449,7 @@ function aat_get_user_limits() {
             if ($response_code === 200 && isset($body['success']) && $body['success'] && isset($body['limits'])) {
                 $cached_limits = $body['limits'];
             } else {
-                // API call succeeded but returned error - log it for debugging
-                if (defined('WP_DEBUG') && WP_DEBUG) {
-                    error_log('AAT: get_limits API returned error. Response code: ' . $response_code . ', Body: ' . wp_json_encode($body));
-                }
-                // Fallback to free limits if API fails
+                // API call succeeded but returned error - fallback to free limits
                 $cached_limits = [
                     'current_limit' => $free_limit,
                     'plan' => 'free',
@@ -1374,11 +1457,7 @@ function aat_get_user_limits() {
                 ];
             }
         } else {
-            // API call failed - log error for debugging
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('AAT: get_limits API call failed. Error: ' . $response->get_error_message());
-            }
-            // Fallback to free limits if API fails
+            // API call failed - fallback to free limits
             $cached_limits = [
                 'current_limit' => $free_limit,
                 'plan' => 'free',
@@ -1396,8 +1475,7 @@ function aat_get_plan_limits() {
     $plan = get_option('aat_plan', 'free');
     
     $limits = [
-        'free' => $config['limits']['free_monthly'] ?? 5,
-        'basic' => 25,    // Deprecated
+        'free' => $config['limits']['free_monthly'] ?? 10,
         'pro' => $config['limits']['pro_monthly'] ?? 50,
         'agency' => -1     // Future feature (unlimited)
     ];
@@ -1481,13 +1559,8 @@ function aat_scan_and_tag(): void {
         return;
     }
     
-    // Bulk generation is Pro-only feature (not available to Basic tier)
-    if (!aat_is_pro_tier()) {
-        $config = aat_get_plugin_config();
-        $price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
-        wp_send_json_error(sprintf(__('Bulk generation is a Pro-only feature. Upgrade to Pro (%s/month) to use bulk actions.', 'hs-auto-image-alt-text-generator-for-seo'), $price_display));
-        return;
-    }
+    // Check if user has available generations (quota-based, not tier-based)
+    // This allows free users to use bulk generation within their quota limits
     
     // Check rate limiting
     if (!aat_check_rate_limit('scan_and_tag')) {
@@ -1515,6 +1588,7 @@ function aat_scan_and_tag(): void {
         } else {
             wp_send_json([
                 'success' => false,
+                /* translators: %d: Number of generations per month */
                 'message' => sprintf(__('Monthly generation limit reached. Upgrade to Pro for %d generations per month.', 'hs-auto-image-alt-text-generator-for-seo'), aat_get_plugin_config()['limits']['pro_monthly'] ?? 50),
                 'limit_reached' => true,
                 'next_reset' => $next_reset,
@@ -1637,12 +1711,12 @@ function aat_get_viewer_data() {
 	}
 
 	// First, get total count for pagination
-	// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Necessary for filtering images by alt text status
 	$count_args = [
         'post_type' => 'attachment',
         'post_mime_type' => 'image',
         'posts_per_page' => -1,
         'post_status' => 'inherit',
+        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Necessary for filtering images by alt text status
         'meta_query' => $meta_query,
 		'fields' => 'ids',
 	];
@@ -1654,7 +1728,7 @@ function aat_get_viewer_data() {
 	$all_image_ids = get_posts($count_args);
 	$total_images = count($all_image_ids);
 	
-	// Count missing alt tags from all images
+	// Count missing alt text from all images
 	$missing_alt_count = 0;
 	foreach ($all_image_ids as $image_id) {
 		$alt = get_post_meta($image_id, '_wp_attachment_image_alt', true);
@@ -1664,13 +1738,13 @@ function aat_get_viewer_data() {
 	}
 
 	// Now get paginated results
-	// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Necessary for filtering images by alt text status
 	$query_args = [
 		'post_type' => 'attachment',
 		'post_mime_type' => 'image',
 		'posts_per_page' => $per_page,
 		'paged' => $paged,
 		'post_status' => 'inherit',
+		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Necessary for filtering images by alt text status
 		'meta_query' => $meta_query,
 	];
 
@@ -1712,7 +1786,7 @@ function aat_render_page_header($active_tab) {
 		<a href="<?php echo esc_url(add_query_arg('tab', 'viewer', remove_query_arg(['paged', 'search', 'filter', 'view']))) ?>" 
 		   class="aat-tab <?php echo $active_tab === 'viewer' ? 'active' : '' ?>">
 			<span class="dashicons dashicons-images-alt2"></span>
-			Alt Tag Viewer
+			Alt Text Viewer
 		</a>
 		<a href="<?php echo esc_url(add_query_arg('tab', 'settings', remove_query_arg(['paged', 'search', 'filter', 'view']))) ?>" 
 		   class="aat-tab <?php echo $active_tab === 'settings' ? 'active' : '' ?>">
@@ -1728,6 +1802,7 @@ function aat_render_stats_cards($data) {
 	$monthly_usage = aat_get_monthly_usage();
 	$limits = aat_get_user_limits();
 	$remaining_generations = aat_get_remaining_free_generations();
+	$paid_generations = aat_get_paid_generations();
 	$is_pro = aat_is_pro_user();
 	$is_developer = aat_is_developer_environment();
 	
@@ -1742,12 +1817,14 @@ function aat_render_stats_cards($data) {
 		
 		<div class="aat-stat-card aat-stat-success">
 			<div class="aat-stat-number"><?php echo absint($data['total_images'] - $data['missing_alt_count']) ?></div>
-			<div class="aat-stat-label">With Alt Tags</div>
+			<div class="aat-stat-label">With Alt Text</div>
 		</div>
 		<div class="aat-stat-card aat-stat-warning">
 			<div class="aat-stat-number"><?php echo absint($data['missing_alt_count']) ?></div>
-			<div class="aat-stat-label">Missing Alt Tags</div>
+			<div class="aat-stat-label">Missing Alt Text</div>
 		</div>
+		
+		<!-- Free/Pro Monthly Generations Card -->
 		<div class="aat-stat-card aat-stat-info">
 			<?php 
 			$limits = aat_get_user_limits();
@@ -1760,18 +1837,50 @@ function aat_render_stats_cards($data) {
 				</button>
 			</div>
 			<div class="aat-stat-note"><?php echo absint($limits['current_limit']) ?> per month</div>
-		<?php if (!$is_pro): ?>
-		<?php
-		$config = aat_get_plugin_config();
-		$pro_limit = $config['limits']['pro_monthly'] ?? 50;
-		$price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
-		?>
-		<div class="aat-upgrade-text" style="margin-top: 8px; padding: 6px 8px; background: rgba(34, 113, 177, 0.1); border-radius: 4px; border-left: 3px solid #2271b1; transition: all 0.2s ease; cursor: pointer;" onmouseover="this.style.background='rgba(34, 113, 177, 0.15)'" onmouseout="this.style.background='rgba(34, 113, 177, 0.1)'" onclick="window.open('<?php echo esc_js(aat_get_stripe_checkout_url()) ?>', '_blank')">
-			<span style="color: #2271b1; font-size: 11px; font-weight: 500; display: block; line-height: 1.4;">
-				🚀 <span style="text-decoration: underline;"><?php echo esc_html(sprintf(__('Upgrade to Pro (%s/month) for %d Generations per Month', 'hs-auto-image-alt-text-generator-for-seo'), $price_display, $pro_limit)); ?></span>
-			</span>
+			<?php if (!$is_pro): ?>
+			<?php
+			$config = aat_get_plugin_config();
+			$pro_limit = $config['limits']['pro_monthly'] ?? 50;
+			$pro_price = floatval($config['pricing']['pro_monthly_price'] ?? 10.00);
+			$price_display = '$' . number_format($pro_price, 0);
+			?>
+			<div class="aat-upgrade-text" style="margin-top: 8px; padding: 6px 8px; background: rgba(34, 113, 177, 0.1); border-radius: 4px; border-left: 3px solid #2271b1; transition: all 0.2s ease;">
+				<span style="color: #2271b1; font-size: 11px; font-weight: 500; display: block; line-height: 1.4;">
+					🚀 <span style="text-decoration: underline; cursor: pointer;" onclick="window.open('<?php echo esc_js(aat_get_stripe_checkout_url()) ?>', '_blank')"><?php 
+					/* translators: %1$s: Price (e.g., $10), %2$d: Number of generations per month */
+					echo esc_html(sprintf(__('Upgrade to Pro (%1$s/month) for %2$d Generations per Month', 'hs-auto-image-alt-text-generator-for-seo'), $price_display, $pro_limit)); 
+					?></span>
+				</span>
+			</div>
+			<?php endif; ?>
 		</div>
-		<?php endif; ?>
+		
+		<!-- Paid Generations Card -->
+		<div class="aat-stat-card aat-stat-info">
+			<?php
+			$config = aat_get_plugin_config();
+			$gen_pack_price = floatval($config['pricing']['generation_pack_price'] ?? 5.00);
+			$gen_pack_price_display = '$' . number_format($gen_pack_price, 0);
+			$gen_pack_url = aat_get_generation_pack_checkout_url();
+			?>
+			<div class="aat-stat-number"><?php echo absint($paid_generations) ?></div>
+			<div class="aat-stat-label">
+				Paid Generations Remaining
+				<button type="button" id="aat-refresh-paid-generations" class="button button-small" style="margin-left: 8px; padding: 0 6px; font-size: 11px; height: 20px; line-height: 18px; vertical-align: middle; display: inline-flex; align-items: center; justify-content: center;" title="Refresh paid generations (useful after purchasing a pack)">
+					<span class="dashicons dashicons-update" style="font-size: 16px; width: 16px; height: 16px; line-height: 1; vertical-align: middle;"></span>
+				</button>
+			</div>
+			<div class="aat-stat-note">From Generation Packs</div>
+			<?php if ($gen_pack_url): ?>
+			<div class="aat-upgrade-text" style="margin-top: 8px; padding: 6px 8px; background: rgba(34, 113, 177, 0.1); border-radius: 4px; border-left: 3px solid #2271b1; transition: all 0.2s ease;">
+				<span style="color: #2271b1; font-size: 11px; font-weight: 500; display: block; line-height: 1.4;">
+					💎 <span style="text-decoration: underline; cursor: pointer;" onclick="window.open('<?php echo esc_js($gen_pack_url) ?>', '_blank')"><?php 
+					/* translators: %s: Price (e.g., $5) */
+					echo esc_html(sprintf(__('Buy Generation Pack (%s for 20 generations)', 'hs-auto-image-alt-text-generator-for-seo'), $gen_pack_price_display)); 
+					?></span>
+				</span>
+			</div>
+			<?php endif; ?>
 		</div>
 		<?php 
 		// Developer cards removed - debug info available in admin dashboard
@@ -1784,50 +1893,20 @@ function aat_render_stats_cards($data) {
 function aat_render_bulk_actions() {
 	?>
 	<!-- Bulk Actions -->
-	<?php if (aat_is_pro_tier()): ?>
-		<div class="aat-bulk-section">
-			<h3>Bulk Actions</h3>
-			<div class="aat-bulk-controls">
-				<button id="aat-bulk-scan-button" class="button button-primary" style="display: flex; align-items: center; gap: 5px;">
-					<span class="dashicons dashicons-superhero"></span>
-					Bulk Generate Missing Alt Tags
-				</button>
-				<span class="aat-bulk-info">Generate alt tags for all images missing them</span>
-			</div>
-			<p class="aat-bulk-note"><strong>Note:</strong> This will use AI to generate alt tags for images without them.</p>
-			<div id="aat-bulk-results" class="aat-bulk-results"></div>
+	<div class="aat-bulk-section">
+		<h3>Bulk Actions</h3>
+		<div class="aat-bulk-controls">
+			<button type="button" id="aat-bulk-scan-button" class="button button-primary" style="display: flex; align-items: center; gap: 5px;">
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink: 0; width: 16px; height: 16px;">
+					<path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" fill="currentColor"/>
+				</svg>
+				Bulk Generate Missing Alt Text
+			</button>
+			<span class="aat-bulk-info">Generate alt text for all images missing them</span>
 		</div>
-	<?php else: ?>
-		<div class="aat-bulk-section aat-bulk-disabled">
-			<h3>Bulk Actions</h3>
-			<div class="aat-bulk-controls">
-				<button class="button button-secondary" disabled style="display: inline-flex; align-items: center; gap: 5px;">
-					<span class="dashicons dashicons-lock" style="vertical-align: middle;"></span>
-					Bulk Generate Missing Alt Tags
-				</button>
-					<span class="aat-bulk-info">
-						<?php
-						$config = aat_get_plugin_config();
-						$price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
-						$tier = aat_get_central_pro_status();
-						if ($tier === 'basic'):
-							// Basic users see message about upgrading to Pro for bulk features
-							$message = sprintf(__('Bulk generation is a Pro-only feature. Upgrade to Pro (%s/month) to use bulk actions.', 'hs-auto-image-alt-text-generator-for-seo'), esc_html($price_display));
-							?>
-							<span class="aat-underline" style="text-decoration: underline !important; border-bottom: 1px solid currentColor !important; display: inline;"><?php echo esc_html($message); ?></span>
-							<?php
-						else:
-							// Free users see standard upgrade message
-							?>
-							<a href="<?php echo esc_url(aat_get_stripe_checkout_url()) ?>" target="_blank" style="text-decoration: underline;"><?php echo esc_html(sprintf(__('Upgrade to Pro (%s/month)', 'hs-auto-image-alt-text-generator-for-seo'), $price_display)); ?></a> to use bulk actions
-							<?php
-						endif;
-						?>
-					</span>
-			</div>
-			<p class="aat-bulk-note"><strong>Note:</strong> This will use available AI generations to create missing alt tags for your images.</p>
-		</div>
-	<?php endif; ?>
+		<p class="aat-bulk-note"><strong>Note:</strong> This will use your available AI generations. Free users can generate up to 10 images per month. Upgrade to Pro for 50 generations per month.</p>
+		<div id="aat-bulk-results" class="aat-bulk-results"></div>
+	</div>
 	<?php
 }
 
@@ -1850,7 +1929,7 @@ function aat_render_filters_form($data) {
 				<label for="aat-filter">Filter:</label>
 				<select id="aat-filter" name="filter" class="aat-filter-select">
         	<option value="">All Images</option>
-					<option value="missing" <?php echo $data['filter'] === 'missing' ? 'selected' : '' ?>>Missing Alt Tags</option>
+					<option value="missing" <?php echo $data['filter'] === 'missing' ? 'selected' : '' ?>>Missing Alt Text</option>
 				</select>
 			</div>
 			
@@ -1943,7 +2022,7 @@ function aat_viewer_page() {
 							matching "<?php echo esc_html($data['search']) ?>"
 						<?php endif; ?>
 						<?php if ($data['filter'] === 'missing'): ?>
-							with missing alt tags
+							with missing alt text
 						<?php endif; ?>
 					</div>
 					
@@ -2246,7 +2325,7 @@ if (!$thumb_url) {
 							<div class="aat-info-item">
 								<strong>Tier:</strong> <?php 
 								$tier = aat_get_central_pro_status();
-								echo esc_html(ucfirst($tier)); // Shows: Free, Basic, or Pro
+								echo esc_html(ucfirst($tier)); // Shows: Free or Pro
 								?>
 							</div>
 							<div class="aat-info-item">
@@ -2288,6 +2367,77 @@ if (!$thumb_url) {
 			border-bottom: 1px solid currentColor !important;
 			display: inline-block;
 		}
+		.aat-upgrade-popup {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background: rgba(0, 0, 0, 0.7);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			z-index: 100000;
+		}
+		.aat-upgrade-popup-content {
+			background: #fff;
+			border-radius: 8px;
+			padding: 24px;
+			max-width: 500px;
+			width: 90%;
+			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+			position: relative;
+		}
+		.aat-upgrade-popup-content h2 {
+			margin-top: 0;
+			margin-bottom: 16px;
+		}
+		.aat-upgrade-buttons {
+			display: flex;
+			gap: 10px;
+			margin-top: 20px;
+			flex-wrap: wrap;
+			justify-content: center;
+		}
+		.aat-upgrade-buttons-top {
+			display: flex;
+			gap: 10px;
+			justify-content: center;
+			width: 100%;
+			margin-bottom: 10px;
+		}
+		.aat-upgrade-buttons-bottom {
+			display: flex;
+			justify-content: center;
+			width: 100%;
+		}
+		.aat-upgrade-btn {
+			flex: 1;
+			max-width: 200px;
+			padding: 10px 20px;
+			border: none;
+			border-radius: 4px;
+			cursor: pointer;
+			font-size: 14px;
+			font-weight: 600;
+			text-decoration: none;
+			display: inline-block;
+			text-align: center;
+		}
+		.aat-upgrade-btn.primary {
+			background: #2271b1;
+			color: #fff;
+		}
+		.aat-upgrade-btn.primary:hover {
+			background: #135e96;
+		}
+		.aat-upgrade-btn.secondary {
+			background: #f0f0f1;
+			color: #2c3338;
+		}
+		.aat-upgrade-btn.secondary:hover {
+			background: #dcdcde;
+		}
 	</style>
 	
 	<script>
@@ -2315,28 +2465,59 @@ if (!$thumb_url) {
 			
 		<?php
 		$config = aat_get_plugin_config();
-		$free_limit = $config['limits']['free_monthly'] ?? 5;
-		$pro_limit = $config['limits']['pro_monthly'] ?? 50;
-		$price_display = $config['pricing']['pro_monthly_price_display'] ?? '$10';
+		
+		// Get limits from config (live values from database)
+		// Only use fallback if config has error flag (API completely failed)
+		$is_error_state = isset($config['error']) && $config['error'] === true;
+		
+		// Handle limits - if value is 0 or missing, use fallback (unless error state)
+		$free_limit_raw = $config['limits']['free_monthly'] ?? null;
+		$free_limit = $is_error_state ? 10 : ((!is_null($free_limit_raw) && $free_limit_raw > 0) ? intval($free_limit_raw) : 10);
+		
+		$pro_limit_raw = $config['limits']['pro_monthly'] ?? null;
+		$pro_limit = $is_error_state ? 50 : ((!is_null($pro_limit_raw) && $pro_limit_raw > 0) ? intval($pro_limit_raw) : 50);
+		
+		// Get prices (always numeric, format with $ when displaying)
+		$pro_price = floatval($config['pricing']['pro_monthly_price'] ?? 10.00);
+		$price_display = '$' . number_format($pro_price, 0);
+		
+		$gen_pack_price = floatval($config['pricing']['generation_pack_price'] ?? 5.00);
+		$gen_pack_price_display = '$' . number_format($gen_pack_price, 0);
+		
 		$checkout_url = aat_get_stripe_checkout_url();
+		$gen_pack_url = aat_get_generation_pack_checkout_url();
 		?>
 		const popup = document.createElement('div');
 		popup.className = 'aat-upgrade-popup';
 		popup.innerHTML = `
 			<div class="aat-upgrade-popup-content">
 				<h2>🚀 Generation Limit Reached</h2>
-				<p>You've used all <?php echo absint($free_limit); ?> of your free alt tag generations for this month!</p>
+				<p>You've used all <?php echo absint($free_limit); ?> of your free alt text generations for this month!</p>
 				<div class="aat-countdown">
 					⏰ Free generations reset in: <strong>${countdownText}</strong>
 				</div>
 				<p>Want <?php echo absint($pro_limit); ?> generations per month? Upgrade to Pro for just <strong><?php echo esc_html($price_display); ?>/month</strong>!</p>
+				<?php if ($gen_pack_url): ?>
+				<p style="margin-top: 16px; padding: 12px; background: #f0f6fc; border-left: 4px solid #2271b1; border-radius: 4px; color: #1d2327;">
+					💎 <strong>Or buy a Generation Pack:</strong> Get 20 generations for just <strong><?php echo esc_html($gen_pack_price_display); ?></strong> - works alongside your monthly quota and never expires!
+				</p>
+				<?php endif; ?>
 				<div class="aat-upgrade-buttons">
-					<a href="#" class="aat-upgrade-btn primary" onclick="window.open('<?php echo esc_js($checkout_url); ?>', '_blank')">
-						🔥 Upgrade to Pro
-					</a>
-					<button class="aat-upgrade-btn secondary" onclick="closeUpgradePopup()">
-						Maybe Later
-					</button>
+					<div class="aat-upgrade-buttons-top">
+						<a href="#" class="aat-upgrade-btn primary" onclick="window.open('<?php echo esc_js($checkout_url); ?>', '_blank')">
+							🔥 Upgrade to Pro
+						</a>
+						<?php if ($gen_pack_url): ?>
+						<a href="#" class="aat-upgrade-btn primary" style="background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);" onclick="window.open('<?php echo esc_js($gen_pack_url); ?>', '_blank')">
+							💎 Buy Generation Pack
+						</a>
+						<?php endif; ?>
+					</div>
+					<div class="aat-upgrade-buttons-bottom">
+						<button class="aat-upgrade-btn secondary" onclick="closeUpgradePopup()">
+							Maybe Later
+						</button>
+					</div>
 				</div>
 			</div>
 		`;
@@ -2357,72 +2538,162 @@ if (!$thumb_url) {
 			const bulkResults = document.getElementById('aat-bulk-results');
 			
 			if (bulkButton) {
-				bulkButton.addEventListener('click', function() {
-					const originalHtml = bulkButton.innerHTML;
-					bulkButton.innerHTML = '<span class="dashicons dashicons-update" style="animation: spin 1s linear infinite;"></span> Processing...';
-					bulkButton.disabled = true;
+				bulkButton.addEventListener('click', function(e) {
+					e.preventDefault();
+					e.stopPropagation();
 					
-					bulkResults.style.display = 'block';
-					bulkResults.innerHTML = '<p>Starting bulk generation of alt tags...</p>';
+					<?php
+					// Get current generation counts for confirmation dialog
+					$remaining_generations = aat_get_remaining_free_generations();
+					$paid_generations = aat_get_paid_generations();
+					$total_available = $remaining_generations + $paid_generations;
+					$is_pro = aat_is_pro_user();
+					$config = aat_get_plugin_config();
+					$monthly_limit = $is_pro 
+						? ($config['limits']['pro_monthly'] ?? 50)
+						: ($config['limits']['free_monthly'] ?? 10);
+					?>
 					
-					fetch(aat_ajax_object.ajax_url + '?action=aat_scan_and_tag&nonce=' + aat_ajax_object.nonce)
-						.then(res => res.json())
-						.then(data => {
-							// Check if limit reached
-							if (data.limit_reached && data.next_reset) {
-								bulkButton.innerHTML = originalHtml;
-								bulkButton.disabled = false;
-								bulkResults.innerHTML = '<p style="color: #d63638;">Generation limit reached for this month.</p>';
-								showUpgradePopup(data.next_reset);
-								return;
-							}
+					// Show confirmation dialog
+					const remainingFree = <?php echo absint($remaining_generations); ?>;
+					const remainingPaid = <?php echo absint($paid_generations); ?>;
+					const totalAvailable = <?php echo absint($total_available); ?>;
+					const isPro = <?php echo $is_pro ? 'true' : 'false'; ?>;
+					const monthlyLimit = <?php echo absint($monthly_limit); ?>;
+					
+					// Create confirmation popup
+					const confirmPopup = document.createElement('div');
+					confirmPopup.className = 'aat-upgrade-popup';
+					confirmPopup.style.zIndex = '100001';
+					confirmPopup.innerHTML = `
+						<div class="aat-upgrade-popup-content" style="max-width: 500px;">
+							<h2>⚠️ Confirm Bulk Generation</h2>
+							<p style="margin-bottom: 16px;"><strong>This will generate alt text for all images missing them.</strong></p>
 							
-							bulkButton.innerHTML = '<span class="dashicons dashicons-yes-alt"></span> Completed!';
-							bulkButton.style.background = '#00a32a';
+							<div style="background: #f0f6fc; border-left: 4px solid #2271b1; padding: 12px; margin: 16px 0; border-radius: 4px;">
+								<p style="margin: 0 0 8px 0; font-weight: 600; color: #1d2327;">📊 Your Available Generations:</p>
+								<ul style="margin: 0; padding-left: 20px; color: #50575e;">
+									<li><strong>${remainingFree}</strong> ${isPro ? 'Pro' : 'Free'} generations remaining this month</li>
+									${remainingPaid > 0 ? `<li><strong>${remainingPaid}</strong> paid generations from packs</li>` : '<li>No paid generations available</li>'}
+									<li style="margin-top: 8px; font-weight: 600; color: #1d2327;">Total available: <strong>${totalAvailable}</strong></li>
+								</ul>
+							</div>
 							
-							let html = `<p><strong>${data.message}</strong></p>`;
+							<p style="color: #d63638; font-weight: 600; margin-bottom: 16px;">
+								⚠️ Each image will use 1 generation. Make sure you have enough generations available, or manually generate the alt text for the images you want to add alt text to.
+							</p>
 							
-							if (data.images && data.images.length) {
-								html += `<div style="margin-top: 15px;">
-									<h4>Generated Alt Tags:</h4>
-									<div style="max-height: 300px; overflow-y: auto;">`;
+							<div class="aat-upgrade-buttons">
+								<button type="button" class="aat-upgrade-btn primary" id="aat-confirm-bulk">
+									✅ Yes, Generate Missing Image Alt Texts
+								</button>
+								<button type="button" class="aat-upgrade-btn secondary" id="aat-cancel-bulk">
+									Cancel
+								</button>
+							</div>
+						</div>
+					`;
+					
+					document.body.appendChild(confirmPopup);
+					
+					// Handle confirmation - use setTimeout to ensure DOM is ready
+					setTimeout(function() {
+						const confirmBtn = document.getElementById('aat-confirm-bulk');
+						const cancelBtn = document.getElementById('aat-cancel-bulk');
+						
+						if (confirmBtn) {
+							confirmBtn.addEventListener('click', function() {
+								confirmPopup.remove();
 								
-								data.images.forEach(img => {
-									html += `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px; background: #fff; border-radius: 4px; border: 1px solid #e0e0e0;">
-										<img src="${img.url}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
-										<div style="flex: 1;">
-											<div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${img.title || 'Untitled'}</div>
-											<div style="font-size: 12px; color: #646970; margin-bottom: 4px;">ID: ${img.id}</div>
-											<div style="color: #1d2327; font-size: 13px; line-height: 1.4;">${img.alt}</div>
-										</div>
-										<div style="margin-left: auto;">
-											<a href="${img.edit_url}" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: #2271b1; color: #fff; text-decoration: none; border-radius: 3px; font-size: 12px;">
-												<span class="dashicons dashicons-edit" style="font-size: 12px; width: 12px; height: 12px;"></span>
-												Edit
-											</a>
-										</div>
-									</div>`;
-								});
+								// Proceed with bulk generation
+								const originalHtml = bulkButton.innerHTML;
+								const originalSvg = bulkButton.querySelector('svg') ? bulkButton.querySelector('svg').outerHTML : '';
+								bulkButton.innerHTML = originalSvg + ' Processing...';
+								bulkButton.disabled = true;
 								
-								html += `</div></div>`;
+								bulkResults.style.display = 'block';
+								bulkResults.innerHTML = '<p>Starting bulk generation of alt text...</p>';
+								
+								fetch(aat_ajax_object.ajax_url + '?action=aat_scan_and_tag&nonce=' + aat_ajax_object.nonce)
+									.then(res => res.json())
+									.then(data => {
+										// Check if limit reached
+										if (data.limit_reached && data.next_reset) {
+											bulkButton.innerHTML = originalHtml;
+											bulkButton.disabled = false;
+											bulkResults.innerHTML = '<p style="color: #d63638;">Generation limit reached for this month.</p>';
+											showUpgradePopup(data.next_reset);
+											return;
+										}
+										
+										if (data.success) {
+											bulkButton.innerHTML = originalSvg + ' Completed!';
+											bulkButton.style.background = '#00a32a';
+											
+											let html = `<p><strong>${data.message}</strong></p>`;
+											
+											if (data.images && data.images.length) {
+												html += `<div style="margin-top: 15px;">
+													<h4>Generated Alt Text:</h4>
+													<div style="max-height: 300px; overflow-y: auto;">`;
+												
+												data.images.forEach(img => {
+													html += `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px; background: #fff; border-radius: 4px; border: 1px solid #e0e0e0;">
+														<img src="${img.url}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
+														<div style="flex: 1;">
+															<div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${img.title || 'Untitled'}</div>
+															<div style="font-size: 12px; color: #646970; margin-bottom: 4px;">ID: ${img.id}</div>
+															<div style="color: #1d2327; font-size: 13px; line-height: 1.4;">${img.alt}</div>
+														</div>
+														<div style="margin-left: auto;">
+															<a href="${img.edit_url}" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: #2271b1; color: #fff; text-decoration: none; border-radius: 3px; font-size: 12px;">
+																<span class="dashicons dashicons-edit" style="font-size: 12px; width: 12px; height: 12px;"></span>
+																Edit
+															</a>
+														</div>
+													</div>`;
+												});
+												
+												html += `</div></div>`;
+											}
+											
+											html += `<p style="margin-top: 15px;"><a href="${window.location.href.split('?')[0]}?aat_refresh_cache=1" class="button button-primary">Refresh Page</a></p>`;
+											
+											bulkResults.innerHTML = html;
+											
+											// Reset button after delay
+											setTimeout(() => {
+												bulkButton.innerHTML = originalHtml;
+												bulkButton.disabled = false;
+												bulkButton.style.background = '';
+											}, 3000);
+										} else {
+											bulkButton.innerHTML = originalHtml;
+											bulkButton.disabled = false;
+											bulkResults.innerHTML = '<p style="color: #d63638;">Error: ' + (data.message || 'Unknown error') + '</p>';
+										}
+									})
+									.catch(error => {
+										bulkButton.innerHTML = originalHtml;
+										bulkButton.disabled = false;
+										bulkResults.innerHTML = '<p style="color: #d63638;">Network error during bulk processing: ' + error.message + '</p>';
+									});
+							});
+						}
+						
+						if (cancelBtn) {
+							cancelBtn.addEventListener('click', function() {
+								confirmPopup.remove();
+							});
+						}
+						
+						// Close on outside click
+						confirmPopup.addEventListener('click', function(e) {
+							if (e.target === confirmPopup) {
+								confirmPopup.remove();
 							}
-							
-							html += `<p style="margin-top: 15px;"><a href="${window.location.href}" class="button button-primary">Refresh Page</a></p>`;
-							
-							bulkResults.innerHTML = html;
-							
-							// Reset button after delay
-							setTimeout(() => {
-								bulkButton.innerHTML = originalHtml;
-								bulkButton.disabled = false;
-								bulkButton.style.background = '';
-							}, 3000);
-						})
-						.catch(error => {
-							bulkButton.innerHTML = originalHtml;
-							bulkButton.disabled = false;
-							bulkResults.innerHTML = '<p style="color: #d63638;">Network error during bulk processing: ' + error.message + '</p>';
 						});
+					}, 10);
 				});
 			}
 		});
@@ -2507,6 +2778,25 @@ if (!$thumb_url) {
 		const refreshStatusBtn = document.getElementById('aat-refresh-status');
 		if (refreshStatusBtn) {
 			refreshStatusBtn.addEventListener('click', function() {
+				const icon = this.querySelector('.dashicons');
+				const originalText = this.title;
+				
+				// Show loading state
+				icon.style.animation = 'spin 1s linear infinite';
+				this.title = 'Refreshing...';
+				this.disabled = true;
+				
+				// Reload page with cache bypass parameter
+				const url = new URL(window.location.href);
+				url.searchParams.set('aat_refresh_cache', '1');
+				window.location.href = url.toString();
+			});
+		}
+		
+		// Refresh paid generations button
+		const refreshPaidBtn = document.getElementById('aat-refresh-paid-generations');
+		if (refreshPaidBtn) {
+			refreshPaidBtn.addEventListener('click', function() {
 				const icon = this.querySelector('.dashicons');
 				const originalText = this.title;
 				
@@ -2664,6 +2954,7 @@ function aat_generate_single(): void {
         } else {
             wp_send_json([
                 'success' => false,
+                /* translators: %d: Number of generations per month */
                 'message' => sprintf(__('Monthly generation limit reached. Upgrade to Pro for %d generations per month.', 'hs-auto-image-alt-text-generator-for-seo'), aat_get_plugin_config()['limits']['pro_monthly'] ?? 50),
                 'limit_reached' => true,
                 'next_reset' => $next_reset,
@@ -2713,8 +3004,6 @@ function aat_generate_single(): void {
 
     // Check for WordPress HTTP errors (connection issues, timeouts, etc.)
     if (is_wp_error($response)) {
-        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Intentional error logging for troubleshooting API issues
-        error_log('AAT API Error: ' . $response->get_error_message());
         wp_send_json([
             'success' => false, 
             'error' => 'Connection error: ' . $response->get_error_message(),
@@ -2731,14 +3020,10 @@ function aat_generate_single(): void {
     // Check for API errors
     if ($response_code !== 200) {
         $error_message = $body['error'] ?? 'Unknown API error';
-        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Intentional error logging for troubleshooting API issues
-        error_log('AAT API returned error: ' . $error_message);
         
         // Special handling for "Site not registered" errors
         if ($response_code === 403 && (strpos($error_message, 'Site not registered') !== false || strpos($error_message, 'Invalid site') !== false)) {
-            // Try to re-register the site
-            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Intentional error logging for troubleshooting re-registration
-            error_log('AAT: Attempting automatic re-registration');
+            // Try to re-register the site automatically
             $site_id_to_register = get_option('aat_site_id');
             if ($site_id_to_register) {
                 aat_register_site_with_server($site_id_to_register);
@@ -2769,8 +3054,6 @@ function aat_generate_single(): void {
             'remaining' => aat_get_remaining_free_generations()
         ]);
     } else {
-        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Intentional error logging for troubleshooting empty responses
-        error_log('AAT: No alt text in response');
         wp_send_json([
             'success' => false, 
             'error' => 'No alt text generated',

@@ -64,21 +64,30 @@ wp plugin activate hs-auto-image-alt-text-generator-for-seo
 
 1. After activation, go to **Auto Image Alt Text Generator For SEO** in your WordPress admin menu
 2. View all your images with their current alt text status
-3. Click **Generate** on individual images, or use **Bulk Generate** (Pro) for multiple images
+3. Click **Generate** on individual images, or use **Bulk Generate** for multiple images
 4. Your images now have AI-generated alt text!
 
-## 💎 Free vs Pro
+**Note:** Bulk generation is available to all users. Free users can use it within their monthly quota. Upgrade to Pro for 50 generations/month, or purchase Generation Packs ($5 for 20) as needed.
 
-| Feature               | Free      | Pro |
-|---------              |------     |-----|
-| AI Generations/Month  | 10        | 50 |
-| Individual Generation | ✅        | ✅ |
-| Bulk Generation       | ❌        | ✅ |
-| Alt Text Viewer       | ✅        | ✅ |
-| Search & Filters      | ✅        | ✅ |
-| **Price**             | **Free**  | **$10/month** |
+## 💎 Free vs Pro vs Generation Packs
 
-[Upgrade to Pro →](https://hatrixsolutions.com/auto-image-alt-text-generator-for-seo/)
+| Feature               | Free      | Pro        | Generation Pack |
+|---------              |------     |-----       |-----------------|
+| AI Generations/Month  | 10        | 50         | N/A (one-time) |
+| Individual Generation | ✅        | ✅         | ✅              |
+| Bulk Generation       | ✅        | ✅         | ✅              |
+| Alt Text Viewer       | ✅        | ✅         | ✅              |
+| Search & Filters      | ✅        | ✅         | ✅              |
+| **Price**             | **Free**  | **$10/month** | **$5 (20 generations)** |
+
+[Upgrade to Pro →](https://hatrixsolutions.com/auto-image-alt-text-generator-for-seo/) | 
+[Buy Generation Pack →](https://hatrixsolutions.com/auto-image-alt-text-generator-for-seo/)
+
+**Generation Packs:**
+- One-time purchase of 20 generations for $5
+- Works alongside your monthly quota
+- Generations never expire
+- Perfect for occasional extra needs without a subscription
 
 ## 📋 Licensing Note
 
@@ -87,11 +96,12 @@ This plugin is **free and open source** (GPL v2), meaning you're free to use, mo
 **What's free:**
 - Plugin code (GPL licensed)
 - 10 AI generations/month
+- Bulk generation (uses monthly quota)
 - All viewer features
 
 **What requires payment:**
-- Additional AI generation quota (Pro: 100/month)
-- Access to bulk generation features
+- Additional AI generation quota (Pro: 50/month for $10/month)
+- Generation Packs: $5 for 20 generations (one-time purchase)
 
 ## 🛠️ Requirements
 
@@ -180,7 +190,7 @@ No — by default, the plugin only generates alt text for images that are missin
 Absolutely! You can edit alt text directly in the Media Library or from the plugin's dashboard.
 
 ### Is there a limit?
-Free users get 10 AI generations per month. Pro users get 100 per month.
+Free users get 10 AI generations per month. Pro users get 50 per month. You can also purchase Generation Packs ($5 for 20 generations) as one-time purchases that never expire.
 
 ### Does it work with WooCommerce/ACF/other plugins?
 Yes! It works with any WordPress image in the Media Library, regardless of how it was uploaded.
